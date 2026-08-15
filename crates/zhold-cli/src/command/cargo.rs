@@ -149,9 +149,12 @@ fn execute_managed(
             });
         }
     };
+    let was_interrupted = child.was_interrupted();
     let high_water_observation = std::cmp::max(initial_size, measured_or_zero(&lease));
     let exit_code = status.code().unwrap_or(1);
-    let outcome = if status.success() {
+    let outcome = if was_interrupted {
+        BuildOutcome::Terminated
+    } else if status.success() {
         BuildOutcome::Succeeded
     } else if let Some(code) = status.code() {
         BuildOutcome::Failed(code)
