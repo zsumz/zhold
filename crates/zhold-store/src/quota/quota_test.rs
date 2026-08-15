@@ -146,7 +146,7 @@ fn exact_external_enforcement_can_be_adopted_and_gates_aggregate_reservations()
     let second = ByteSize::from_bytes(301);
     assert!(super::admission::validate(&status, first).is_ok());
     assert!(super::admission::validate(&status, second).is_ok());
-    assert!(super::admission::validate(&status, first + second).is_err());
+    assert!(super::admission::validate(&status, first.saturating_add(second)).is_err());
     let at_limit = super::service::status(
         status.expectation,
         configured(
