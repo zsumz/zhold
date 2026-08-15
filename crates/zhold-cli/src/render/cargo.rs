@@ -160,6 +160,39 @@ pub(crate) fn cargo_finalization_failed(
     .map_err(output_error)
 }
 
+pub(crate) fn cargo_management_failed(
+    report: &CargoReport,
+    stage: &'static str,
+    error: &str,
+    format: OutputFormat,
+) -> Result<(), CliError> {
+    if matches!(format, OutputFormat::Json) {
+        #[derive(Serialize)]
+        struct Failure<'a> {
+            event: &'static str,
+            stage: &'static str,
+            arena_id: &'a ArenaId,
+            cargo_exit_code: i32,
+            error: &'a str,
+        }
+        return json::write_stderr(&Failure {
+            event: "cargo_management_failed",
+            stage,
+            arena_id: &report.arena_id,
+            cargo_exit_code: report.exit_code,
+            error,
+        });
+    }
+    let stderr = io::stderr();
+    let mut output = stderr.lock();
+    writeln!(
+        output,
+        "zhold  Cargo exited {}, but {stage} failed: {error}",
+        report.exit_code
+    )
+    .map_err(output_error)
+}
+
 fn short_id(arena: &ArenaId) -> &str {
     arena.as_str().get(..10).unwrap_or(arena.as_str())
 }

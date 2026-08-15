@@ -71,8 +71,7 @@ fn collection_and_filters_are_newest_first() -> Result<(), Box<dyn std::error::E
 }
 
 #[test]
-fn post_build_collection_records_its_lifecycle_source()
--> Result<(), Box<dyn std::error::Error>> {
+fn post_build_collection_records_its_lifecycle_source() -> Result<(), Box<dyn std::error::Error>> {
     let temporary = tempdir()?;
     let store = Store::open(temporary.path().join("store"))?;
 

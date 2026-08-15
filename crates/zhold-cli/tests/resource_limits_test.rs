@@ -176,7 +176,7 @@ fn create_project(root: &Path) -> Result<(), io::Error> {
 fn waiting_build_script() -> &'static str {
     "use std::{path::Path, thread, time::Duration};\n\
      fn main() {\n\
-         let release = std::env::var_os(\"ZHOLD_TEST_RELEASE\").unwrap();\n\
+         let Some(release) = std::env::var_os(\"ZHOLD_TEST_RELEASE\") else { return; };\n\
          while !Path::new(&release).is_file() {\n\
              thread::sleep(Duration::from_millis(10));\n\
          }\n\

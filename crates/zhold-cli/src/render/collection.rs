@@ -54,6 +54,26 @@ pub(crate) fn preflight(report: &CollectionReport, format: OutputFormat) -> Resu
     Ok(())
 }
 
+pub(crate) fn post_build(report: &CollectionReport, format: OutputFormat) -> Result<(), CliError> {
+    if matches!(format, OutputFormat::Json) {
+        #[derive(Serialize)]
+        struct PostBuild<'a> {
+            event: &'static str,
+            report: &'a CollectionReport,
+        }
+        json::write_stderr(&PostBuild {
+            event: "post_build_collection",
+            report,
+        })?;
+        return super::history::warnings(&report.history.warnings, format);
+    }
+    if report.retirements.is_empty() && report.skipped.is_empty() && report.budget_met {
+        return super::history::warnings(&report.history.warnings, format);
+    }
+    preflight(report, format)?;
+    super::history::warnings(&report.history.warnings, format)
+}
+
 pub(crate) fn collection(report: &CollectionReport, format: OutputFormat) -> Result<(), CliError> {
     if matches!(format, OutputFormat::Json) {
         json::write(report)?;

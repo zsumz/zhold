@@ -16,6 +16,8 @@ use crate::{
     render,
 };
 
+mod finalize;
+
 const SENTINEL_ENV: &str = "ZHOLD_INTERNAL_CARGO_SENTINEL";
 const DEFAULT_BUILD_RESERVATION: ByteSize = ByteSize::from_bytes(1024 * 1024 * 1024);
 
@@ -169,39 +171,7 @@ fn execute_managed(
         peak_size,
         size_limit_exceeded,
     };
-    finalize_cargo(store, lease, &report, limits.max_arena_size, format)
-}
-
-fn finalize_cargo(
-    store: &Store,
-    lease: zhold_store::ArenaLease,
-    report: &CargoReport,
-    warning_threshold: Option<ByteSize>,
-    format: OutputFormat,
-) -> Result<ExitStatus, CliError> {
-    if let Ok(Some(quota)) = store.observe_adopted_quota() {
-        let _ignored = render::quota_post_build(&quota, format);
-    }
-    let finalization = lease.finish_observed(
-        report.outcome,
-        report.peak_size,
-        warning_threshold,
-        report.size_limit_exceeded,
-    );
-    match finalization {
-        Ok(finalization) => {
-            render::cargo_finish_with_history(report, &finalization, format)?;
-            Ok(ExitStatus::child(report.exit_code))
-        }
-        Err(error) => {
-            render::cargo_finalization_failed(report, &error.to_string(), format)?;
-            if report.exit_code == 0 {
-                Ok(ExitStatus::MANAGEMENT_FAILURE)
-            } else {
-                Ok(ExitStatus::child(report.exit_code))
-            }
-        }
-    }
+    finalize::execute(store, lease, &report, limits, format)
 }
 
 fn wait_for_cargo(
