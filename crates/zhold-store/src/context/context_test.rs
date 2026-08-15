@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use super::{CargoInvocation, cargo::parse_version};
+use super::{CargoInvocation, ContextResolver, cargo::parse_version};
 
 #[test]
 fn cargo_invocation_accepts_a_path_to_cargo() {
@@ -149,5 +149,31 @@ fn repeated_change_directory_options_compose_in_order() -> Result<(), Box<dyn st
         invocation.effective_working_directory()?,
         nested.canonicalize()?
     );
+    Ok(())
+}
+
+#[test]
+fn failed_context_subprocesses_do_not_render_arbitrary_arguments()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempfile::tempdir()?;
+    let secret = "registries.private.token='extremely-secret-token'";
+    let invocation = CargoInvocation::new(
+        "cargo".to_owned(),
+        vec![
+            "--config".to_owned(),
+            secret.to_owned(),
+            "check".to_owned(),
+            "--manifest-path".to_owned(),
+            "missing/Cargo.toml".to_owned(),
+        ],
+        temporary.path().to_path_buf(),
+    )?;
+
+    let Err(error) = ContextResolver::resolve(&invocation) else {
+        return Err("missing Cargo manifest unexpectedly resolved".into());
+    };
+
+    assert!(!error.to_string().contains(secret));
+    assert!(error.to_string().contains("Cargo metadata query"));
     Ok(())
 }

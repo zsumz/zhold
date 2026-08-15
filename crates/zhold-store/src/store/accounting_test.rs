@@ -89,6 +89,28 @@ fn raw_cargo_arguments_are_never_persisted_or_exposed() -> Result<(), Box<dyn st
 }
 
 #[test]
+fn command_fingerprints_do_not_correlate_across_stores() -> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let project = tempdir()?;
+    let first = Store::open(temporary.path().join("first"))?;
+    let second = Store::open(temporary.path().join("second"))?;
+    let context = test_support::context(project.path())?;
+    let invocation = test_support::invocation(project.path())?;
+
+    first
+        .lease(&context, &invocation)?
+        .finish(BuildOutcome::Succeeded)?;
+    second
+        .lease(&context, &invocation)?
+        .finish(BuildOutcome::Succeeded)?;
+
+    let first_fingerprint = &first.inventory()?.arenas[0].command.arguments_fingerprint;
+    let second_fingerprint = &second.inventory()?.arenas[0].command.arguments_fingerprint;
+    assert_ne!(first_fingerprint, second_fingerprint);
+    Ok(())
+}
+
+#[test]
 fn unreadable_owned_metadata_blocks_collection() -> Result<(), Box<dyn std::error::Error>> {
     let temporary = tempdir()?;
     let project = tempdir()?;

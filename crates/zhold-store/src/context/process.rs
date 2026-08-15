@@ -3,6 +3,7 @@ use std::{path::Path, process::Command};
 use crate::StoreError;
 
 pub(super) fn required_output(
+    description: &'static str,
     program: &str,
     arguments: &[String],
     working_directory: &Path,
@@ -12,18 +13,19 @@ pub(super) fn required_output(
         .output()
         .map_err(|error| StoreError::io("spawn command", working_directory, error))?;
     if !output.status.success() {
-        return Err(command_failed(program, arguments, &output));
+        return Err(command_failed(description, &output));
     }
     String::from_utf8(output.stdout)
         .map(|value| value.trim().to_owned())
         .map_err(|error| StoreError::CommandFailed {
-            command: render(program, arguments),
+            command: description.to_owned(),
             status: " with non-UTF-8 output".to_owned(),
             stderr: error.to_string(),
         })
 }
 
 pub(super) fn optional_output(
+    description: &'static str,
     program: &str,
     arguments: &[String],
     working_directory: &Path,
@@ -37,7 +39,7 @@ pub(super) fn optional_output(
     String::from_utf8(output.stdout)
         .map(|value| Some(value.trim().to_owned()))
         .map_err(|error| StoreError::CommandFailed {
-            command: render(program, arguments),
+            command: description.to_owned(),
             status: " with non-UTF-8 output".to_owned(),
             stderr: error.to_string(),
         })
@@ -57,25 +59,14 @@ fn command(
     command
 }
 
-fn command_failed(
-    program: &str,
-    arguments: &[String],
-    output: &std::process::Output,
-) -> StoreError {
+fn command_failed(description: &'static str, output: &std::process::Output) -> StoreError {
     let status = output.status.code().map_or_else(
         || " without an exit code".to_owned(),
         |code| format!(" with status {code}"),
     );
     StoreError::CommandFailed {
-        command: render(program, arguments),
+        command: description.to_owned(),
         status,
-        stderr: String::from_utf8_lossy(&output.stderr).trim().to_owned(),
+        stderr: "subprocess stderr omitted to protect invocation values".to_owned(),
     }
-}
-
-fn render(program: &str, arguments: &[String]) -> String {
-    std::iter::once(program)
-        .chain(arguments.iter().map(String::as_str))
-        .collect::<Vec<_>>()
-        .join(" ")
 }

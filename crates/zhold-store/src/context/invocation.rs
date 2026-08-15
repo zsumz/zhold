@@ -184,8 +184,12 @@ impl CargoInvocation {
         Ok(arguments)
     }
 
-    pub(crate) fn descriptor(&self) -> CommandDescriptor {
-        CommandDescriptor::from_arguments(&self.arguments)
+    pub(crate) fn descriptor(&self, fingerprint_key: &[u8; 32]) -> CommandDescriptor {
+        CommandDescriptor::from_arguments(&self.arguments, fingerprint_key)
+    }
+
+    pub(crate) fn command_class(&self) -> zhold_core::CargoCommandClass {
+        CommandDescriptor::classify(&self.arguments)
     }
 }
 

@@ -6,4 +6,4 @@ mod store_marker;
 
 pub(crate) use arena_manifest::ArenaManifest;
 pub(crate) use retirement_record::RetirementRecord;
-pub(crate) use store_marker::StoreMarker;
+pub(crate) use store_marker::{STORE_SCHEMA_VERSION, StoreMarker};

@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::{
     StoreError,
-    io::{configure_private_file, create_json, read_json, secure_directory},
+    io::{configure_private_file, create_json, read_json, secure_directory, write_json},
     layout::StoreLayout,
     lock::ExclusiveFileLock,
     manifest::StoreMarker,
@@ -23,8 +23,8 @@ pub(super) fn open_marker(layout: &StoreLayout) -> Result<StoreMarker, StoreErro
                     reason: "store marker is not a real file".to_owned(),
                 });
             }
-            let marker: StoreMarker = read_json(&marker_path)?;
-            let marker = validate_marker(marker, marker_path)?;
+            let _initialization = ExclusiveFileLock::acquire(&layout.initialization_lock())?;
+            let marker = load_marker(layout)?;
             verify_filesystem_capabilities(layout.root())?;
             Ok(marker)
         }
@@ -34,7 +34,9 @@ pub(super) fn open_marker(layout: &StoreLayout) -> Result<StoreMarker, StoreErro
 }
 
 fn validate_marker(marker: StoreMarker, path: PathBuf) -> Result<StoreMarker, StoreError> {
-    if marker.schema_version == 1 {
+    if marker.schema_version == crate::manifest::STORE_SCHEMA_VERSION
+        && marker.fingerprint_key() != &[0; 32]
+    {
         Ok(marker)
     } else {
         Err(StoreError::InvalidOwnership {
@@ -44,6 +46,16 @@ fn validate_marker(marker: StoreMarker, path: PathBuf) -> Result<StoreMarker, St
     }
 }
 
+fn load_marker(layout: &StoreLayout) -> Result<StoreMarker, StoreError> {
+    let marker_path = layout.marker();
+    let mut marker: StoreMarker = read_json(&marker_path)?;
+    if marker.schema_version == 1 && marker.fingerprint_key() == &[0; 32] {
+        marker.upgrade_fingerprint_key();
+        write_json(&marker_path, &marker)?;
+    }
+    validate_marker(marker, marker_path)
+}
+
 fn initialize_marker(layout: &StoreLayout) -> Result<StoreMarker, StoreError> {
     let marker_path = layout.marker();
     if !contains_only_initialization_files(layout)? {
@@ -51,8 +63,7 @@ fn initialize_marker(layout: &StoreLayout) -> Result<StoreMarker, StoreError> {
     }
     let _initialization = ExclusiveFileLock::acquire(&layout.initialization_lock())?;
     if marker_path.exists() {
-        let winner: StoreMarker = read_json(&marker_path)?;
-        let winner = validate_marker(winner, marker_path)?;
+        let winner = load_marker(layout)?;
         verify_filesystem_capabilities(layout.root())?;
         return Ok(winner);
     }

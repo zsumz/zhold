@@ -43,7 +43,13 @@ fn required_git(working_directory: &Path, arguments: &[&str]) -> Result<String, 
         .iter()
         .map(ToString::to_string)
         .collect::<Vec<_>>();
-    process::required_output("git", &arguments, working_directory, None)
+    process::required_output(
+        "Git repository query",
+        "git",
+        &arguments,
+        working_directory,
+        None,
+    )
 }
 
 fn optional_git(
@@ -54,7 +60,12 @@ fn optional_git(
         .iter()
         .map(ToString::to_string)
         .collect::<Vec<_>>();
-    process::optional_output("git", &arguments, working_directory)
+    process::optional_output(
+        "Git optional metadata query",
+        "git",
+        &arguments,
+        working_directory,
+    )
 }
 
 pub(super) fn canonical_path(path: &Path, kind: &'static str) -> Result<PathBuf, StoreError> {

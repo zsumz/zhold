@@ -66,6 +66,25 @@ fn abandoned_store_marker_staging_is_recovered() -> Result<(), Box<dyn std::erro
 }
 
 #[test]
+fn version_one_store_markers_gain_a_private_fingerprint_key()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let store_id = uuid::Uuid::new_v4();
+    fs::write(
+        temporary.path().join("store.json"),
+        format!("{{\"schema_version\":1,\"store_id\":\"{store_id}\"}}"),
+    )?;
+
+    let store = Store::open(temporary.path())?;
+    let marker: StoreMarker = read_json(&store.layout.marker())?;
+
+    assert_eq!(store.info().store_id, store_id);
+    assert_eq!(marker.schema_version, crate::manifest::STORE_SCHEMA_VERSION);
+    assert_ne!(marker.fingerprint_key(), &[0; 32]);
+    Ok(())
+}
+
+#[test]
 fn dropped_lease_records_a_terminated_run() -> Result<(), Box<dyn std::error::Error>> {
     let temporary = tempdir()?;
     let project = tempdir()?;

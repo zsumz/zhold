@@ -18,7 +18,7 @@ impl Store {
     ) -> Result<ByteSize, StoreError> {
         let _lock = ExclusiveFileLock::acquire(&self.layout.reservation_lock())?;
         let profile = read_profile(self)?;
-        Ok(profile.recommend(invocation.descriptor().command_class, configured_minimum))
+        Ok(profile.recommend(invocation.command_class(), configured_minimum))
     }
 
     pub(crate) fn record_reservation_growth(

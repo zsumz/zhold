@@ -14,6 +14,7 @@ and validation code rather than by path names alone.
     arena.json
     build/
   trash/<arena-id>-<retirement-id>/
+  trash-index/<retirement-id>.json
   history/
     policy.json
     index.json
@@ -31,8 +32,10 @@ and validation code rather than by path names alone.
     worktrees/<key>.lock
 ```
 
-`store.json` establishes ownership with schema version 1 and a random store
-UUID. zhold refuses to claim a non-empty unmarked root.
+`store.json` establishes ownership with schema version 2, a random store UUID,
+and a private command-fingerprint key. The key scopes sanitized invocation
+fingerprints to one store and is never exposed through status output. zhold
+refuses to claim a non-empty unmarked root.
 
 Arena manifests currently write schema version 4 and read versions 1 through 4
 with conservative defaults. Their arena ID must rederive from repository,
@@ -54,6 +57,8 @@ readers and never treated as owned arenas or receipts.
 
 - Unknown future schemas fail closed.
 - Older accepted arena schemas receive only explicit safe defaults.
+- Store schema 1 is upgraded under the initialization lock by adding a private
+  fingerprint key without changing the store UUID.
 - Identity or store-UUID disagreement is an ownership failure, not a migration.
 - A format migration must be crash-safe, idempotent, and independently tested.
 - No migration may infer ownership for an unmarked directory.

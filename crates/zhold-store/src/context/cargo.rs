@@ -37,6 +37,7 @@ fn cargo_version(invocation: &CargoInvocation, prefix: &[String]) -> Result<Stri
     let mut arguments = prefix.to_vec();
     arguments.push("--version".to_owned());
     let output = process::required_output(
+        "Cargo version query",
         invocation.program(),
         &arguments,
         invocation.working_directory(),
@@ -49,6 +50,7 @@ fn cargo_verbose(invocation: &CargoInvocation, prefix: &[String]) -> Result<Stri
     let mut arguments = prefix.to_vec();
     arguments.push("-Vv".to_owned());
     process::required_output(
+        "Cargo verbose version query",
         invocation.program(),
         &arguments,
         invocation.working_directory(),
@@ -63,13 +65,20 @@ fn rustc_verbose(invocation: &CargoInvocation) -> Result<(String, String), Store
         .map(|toolchain| ("RUSTUP_TOOLCHAIN", toolchain));
     let program = super::config_identity::effective_rustc(invocation)?;
     let directory = invocation.effective_working_directory()?;
-    let verbose = process::required_output(&program, &arguments, &directory, environment)?;
+    let verbose = process::required_output(
+        "Rust compiler identity query",
+        &program,
+        &arguments,
+        &directory,
+        environment,
+    )?;
     Ok((program, verbose))
 }
 
 fn workspace_root(invocation: &CargoInvocation) -> Result<PathBuf, StoreError> {
     let arguments = invocation.metadata_arguments()?;
     let manifest = process::required_output(
+        "Cargo metadata query",
         invocation.program(),
         &arguments,
         invocation.working_directory(),

@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-use crate::identity::stable_digest;
-
 /// Bounded classification of a managed Cargo command.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -34,13 +32,28 @@ pub struct CommandDescriptor {
 
 impl CommandDescriptor {
     /// Classifies and fingerprints arguments without retaining their contents.
-    pub fn from_arguments(arguments: &[String]) -> Self {
-        let parts = arguments.iter().map(String::as_str).collect::<Vec<_>>();
+    pub fn from_arguments(arguments: &[String], fingerprint_key: &[u8; 32]) -> Self {
         Self {
-            command_class: command_class(arguments),
-            arguments_fingerprint: stable_digest("zhold-cargo-arguments-v1", &parts),
+            command_class: Self::classify(arguments),
+            arguments_fingerprint: keyed_fingerprint(arguments, fingerprint_key),
         }
     }
+
+    /// Returns the bounded command class without retaining or hashing argument values.
+    pub fn classify(arguments: &[String]) -> CargoCommandClass {
+        command_class(arguments)
+    }
+}
+
+fn keyed_fingerprint(arguments: &[String], key: &[u8; 32]) -> String {
+    let mut hasher = blake3::Hasher::new_keyed(key);
+    hasher.update(b"zhold-cargo-arguments-v2\0");
+    for argument in arguments {
+        let bytes = argument.as_bytes();
+        hasher.update(&u64::try_from(bytes.len()).unwrap_or(u64::MAX).to_le_bytes());
+        hasher.update(bytes);
+    }
+    hasher.finalize().to_hex()[..32].to_owned()
 }
 
 fn command_class(arguments: &[String]) -> CargoCommandClass {

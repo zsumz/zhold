@@ -36,23 +36,15 @@ fn profile_uses_p95_and_previous_growth() -> Result<(), Box<dyn std::error::Erro
     let store = Store::open(temporary.path().join("store"))?;
     let invocation = test_support::invocation(temporary.path())?;
     for growth in 1..=20 {
-        store.record_reservation_growth(
-            invocation.descriptor().command_class,
-            ByteSize::from_bytes(growth),
-        )?;
+        store
+            .record_reservation_growth(invocation.command_class(), ByteSize::from_bytes(growth))?;
     }
-    store.record_reservation_growth(
-        invocation.descriptor().command_class,
-        ByteSize::from_bytes(1),
-    )?;
+    store.record_reservation_growth(invocation.command_class(), ByteSize::from_bytes(1))?;
     assert_eq!(
         store.recommended_reservation(&invocation, ByteSize::ZERO)?,
         ByteSize::from_bytes(19)
     );
-    store.record_reservation_growth(
-        invocation.descriptor().command_class,
-        ByteSize::from_bytes(40),
-    )?;
+    store.record_reservation_growth(invocation.command_class(), ByteSize::from_bytes(40))?;
     assert_eq!(
         store.recommended_reservation(&invocation, ByteSize::from_bytes(30))?,
         ByteSize::from_bytes(40)
