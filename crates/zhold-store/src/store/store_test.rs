@@ -3,8 +3,9 @@ use std::{fs, io, thread, time::Duration};
 use tempfile::tempdir;
 use zhold_core::{ArenaState, BuildOutcome};
 
+#[cfg(unix)]
+use crate::StoreError;
 use crate::{
-    StoreError,
     io::read_json,
     manifest::{ArenaManifest, StoreMarker},
     test_support::{context, invocation},

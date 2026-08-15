@@ -1,9 +1,9 @@
 use std::{
     env,
     path::PathBuf,
-    process::{Child, Command as ProcessCommand, ExitStatus as ProcessExitStatus},
+    process::{Command as ProcessCommand, ExitStatus as ProcessExitStatus},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use serde::Serialize;
@@ -17,6 +17,7 @@ use crate::{
 };
 
 mod finalize;
+mod supervisor;
 
 const SENTINEL_ENV: &str = "ZHOLD_INTERNAL_CARGO_SENTINEL";
 const DEFAULT_BUILD_RESERVATION: ByteSize = ByteSize::from_bytes(1024 * 1024 * 1024);
@@ -127,12 +128,13 @@ fn execute_managed(
     }
     let managed_arguments = invocation.managed_arguments(lease.build_dir())?;
     render::cargo_start(lease.arena_id(), lease.build_dir(), reservation, format)?;
-    let child = ProcessCommand::new(invocation.program())
+    let mut command = ProcessCommand::new(invocation.program());
+    command
         .args(managed_arguments)
         .current_dir(invocation.working_directory())
         .env("CARGO_BUILD_BUILD_DIR", lease.build_dir())
-        .env_remove(SENTINEL_ENV)
-        .spawn();
+        .env_remove(SENTINEL_ENV);
+    let child = supervisor::CargoSupervisor::spawn(&mut command);
     let mut child = match child {
         Ok(value) => value,
         Err(source) => {
@@ -175,39 +177,39 @@ fn execute_managed(
 }
 
 fn wait_for_cargo(
-    child: &mut Child,
+    child: &mut supervisor::CargoSupervisor,
     lease: &zhold_store::ArenaLease,
     limit: Option<ByteSize>,
     format: OutputFormat,
 ) -> Result<(ProcessExitStatus, ByteSize, bool), std::io::Error> {
     let mut peak = measured_or_zero(lease);
     let mut exceeded = false;
-    let Some(limit) = limit else {
-        let status = child.wait()?;
-        peak = std::cmp::max(peak, measured_or_zero(lease));
-        return Ok((status, peak, false));
-    };
+    let mut next_measurement = Instant::now();
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
                 let observed = measured_or_zero(lease);
                 peak = std::cmp::max(peak, observed);
-                exceeded = report_limit_once(lease, observed, limit, exceeded, format);
+                if let Some(limit) = limit {
+                    exceeded = report_limit_once(lease, observed, limit, exceeded, format);
+                }
                 return Ok((status, peak, exceeded));
             }
             Ok(None) => {}
-            Err(_) => {
-                let status = child.wait()?;
-                let observed = measured_or_zero(lease);
-                peak = std::cmp::max(peak, observed);
-                exceeded = report_limit_once(lease, observed, limit, exceeded, format);
-                return Ok((status, peak, exceeded));
+            Err(error) => {
+                let _termination = child.terminate_and_wait();
+                return Err(error);
             }
         }
-        let observed = measured_or_zero(lease);
-        peak = std::cmp::max(peak, observed);
-        exceeded = report_limit_once(lease, observed, limit, exceeded, format);
-        thread::sleep(Duration::from_millis(500));
+        if let Some(limit) = limit
+            && Instant::now() >= next_measurement
+        {
+            let observed = measured_or_zero(lease);
+            peak = std::cmp::max(peak, observed);
+            exceeded = report_limit_once(lease, observed, limit, exceeded, format);
+            next_measurement = Instant::now() + Duration::from_millis(500);
+        }
+        thread::sleep(Duration::from_millis(20));
     }
 }
 
