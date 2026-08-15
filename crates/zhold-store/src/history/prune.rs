@@ -4,6 +4,7 @@ use zhold_core::ByteSize;
 
 use super::{
     HistoryPruneReport, HistoryPruneRequest,
+    index::publish_totals,
     reader::{ValidatedReceipt, history_policy, read_receipt, read_receipts, receipt_order},
 };
 use crate::{Store, StoreError, lock::ExclusiveFileLock};
@@ -40,6 +41,11 @@ pub(crate) fn prune_locked(
             removed_bytes = removed_bytes.saturating_add(item.bytes);
         }
         sync_receipt_directory(store)?;
+        publish_totals(
+            store,
+            before_count.saturating_sub(u64::try_from(removal.len()).unwrap_or(u64::MAX)),
+            before_bytes.saturating_sub(removed_bytes),
+        )?;
     }
     let removed_count = u64::try_from(removal.len()).unwrap_or(u64::MAX);
     Ok(HistoryPruneReport {

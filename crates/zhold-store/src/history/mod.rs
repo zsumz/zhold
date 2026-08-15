@@ -1,6 +1,7 @@
 //! Bounded immutable operation receipts.
 
 mod draft;
+mod index;
 mod model;
 mod prune;
 mod reader;

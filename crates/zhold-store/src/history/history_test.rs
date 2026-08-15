@@ -6,7 +6,12 @@ use zhold_core::{
 };
 
 use super::{CollectionReceiptSource, HistoryPayload, HistoryPruneRequest, HistoryQuery};
-use crate::{CargoInvocation, Store, io::read_json, manifest::ArenaManifest, test_support};
+use crate::{
+    CargoInvocation, Store,
+    io::{read_json, write_json},
+    manifest::ArenaManifest,
+    test_support,
+};
 
 #[test]
 fn completed_build_publishes_a_private_peak_receipt() -> Result<(), Box<dyn std::error::Error>> {
@@ -220,5 +225,40 @@ fn concurrent_publication_retains_every_unique_receipt() -> Result<(), Box<dyn s
         .map(|receipt| receipt.receipt_id)
         .collect::<std::collections::BTreeSet<_>>();
     assert_eq!(identities.len(), 8);
+    Ok(())
+}
+
+#[test]
+fn routine_publication_uses_the_clean_history_index() -> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let store = Store::open(temporary.path().join("store"))?;
+    let worktree = temporary.path().join("worktree");
+    fs::create_dir(&worktree)?;
+    test_support::create_idle_arena(&store, &worktree, 64)?;
+    let foreign = store.layout.history_receipts().join("foreign.txt");
+    fs::write(&foreign, b"not a receipt")?;
+
+    let report = store.collect(
+        CollectionPolicy::new(ByteSize::from_bytes(1_000_000)),
+        false,
+    )?;
+    let mut index = super::index::read(&store)?;
+
+    assert!(report.history.warnings.is_empty());
+    assert!(index.is_clean());
+    assert_eq!(index.receipt_count(), 2);
+    assert!(foreign.is_file());
+    assert_eq!(store.history(&HistoryQuery::default())?.findings.len(), 1);
+
+    index.mark_dirty();
+    write_json(&store.layout.history_index(), &index)?;
+    let recovered = store.collect(
+        CollectionPolicy::new(ByteSize::from_bytes(1_000_000)),
+        false,
+    )?;
+    let rebuilt = super::index::read(&store)?;
+    assert!(recovered.history.warnings.is_empty());
+    assert!(rebuilt.is_clean());
+    assert_eq!(rebuilt.receipt_count(), 3);
     Ok(())
 }

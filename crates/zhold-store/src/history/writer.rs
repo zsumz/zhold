@@ -2,7 +2,10 @@ use uuid::Uuid;
 
 use super::{
     HistoryDraft, HistoryPolicyDocument, HistoryPruneRequest, HistoryReceipt, HistoryWarning,
-    HistoryWarningEvent, HistoryWrite, prune::prune_locked, reader::history_policy,
+    HistoryWarningEvent, HistoryWrite,
+    index::{begin_publication, publish_projection},
+    prune::prune_locked,
+    reader::history_policy,
 };
 use crate::{
     Store, StoreError,
@@ -31,6 +34,7 @@ fn persist_inner(store: &Store, draft: HistoryDraft) -> Result<HistoryWrite, Sto
     if !policy.enabled {
         return Ok(HistoryWrite::default());
     }
+    let index = begin_publication(store)?;
     let recorded_at = unix_milliseconds()?;
     let receipt_id = Uuid::new_v4();
     let receipt = HistoryReceipt {
@@ -48,15 +52,26 @@ fn persist_inner(store: &Store, draft: HistoryDraft) -> Result<HistoryWrite, Sto
             reason: "generated history receipt path already exists".to_owned(),
         });
     }
-    let retention = prune_locked(
-        store,
-        HistoryPruneRequest {
-            keep: Some(policy.max_receipts),
-            max_bytes: Some(policy.max_bytes),
-            older_than: None,
-            dry_run: false,
-        },
+    let receipt_bytes = zhold_core::ByteSize::from_bytes(
+        std::fs::metadata(&path)
+            .map_err(|error| StoreError::io("inspect published history receipt", &path, error))?
+            .len(),
     );
+    let projected = publish_projection(store, &index, receipt_bytes)?;
+    let retention = if projected.fits(policy.max_receipts, policy.max_bytes) {
+        Ok(())
+    } else {
+        prune_locked(
+            store,
+            HistoryPruneRequest {
+                keep: Some(policy.max_receipts),
+                max_bytes: Some(policy.max_bytes),
+                older_than: None,
+                dry_run: false,
+            },
+        )
+        .map(|_report| ())
+    };
     let retained = retention.is_ok() && path.is_file();
     let warnings = retention.err().map_or_else(Vec::new, |error| {
         vec![HistoryWarning {

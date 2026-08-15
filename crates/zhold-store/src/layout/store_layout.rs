@@ -49,6 +49,10 @@ impl StoreLayout {
         self.history().join("policy.json")
     }
 
+    pub(crate) fn history_index(&self) -> PathBuf {
+        self.history().join("index.json")
+    }
+
     pub(crate) fn history_receipts(&self) -> PathBuf {
         self.history().join("receipts")
     }
