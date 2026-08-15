@@ -94,3 +94,37 @@ fn metadata_discovery_rejects_missing_option_values() -> Result<(), Box<dyn std:
     assert!(invocation.metadata_arguments().is_err());
     Ok(())
 }
+
+#[test]
+fn managed_build_directory_has_final_configuration_precedence()
+-> Result<(), Box<dyn std::error::Error>> {
+    let invocation = CargoInvocation::new(
+        "cargo".to_owned(),
+        vec![
+            "run".to_owned(),
+            "--config".to_owned(),
+            "build.build-dir='caller'".to_owned(),
+            "--".to_owned(),
+            "--config".to_owned(),
+            "application-value".to_owned(),
+        ],
+        PathBuf::from("/tmp/project"),
+    )?;
+
+    let arguments = invocation.managed_arguments(&PathBuf::from("/owned/build"))?;
+
+    assert_eq!(
+        arguments,
+        vec![
+            "run",
+            "--config",
+            "build.build-dir='caller'",
+            "--config",
+            "build.build-dir=\"/owned/build\"",
+            "--",
+            "--config",
+            "application-value",
+        ]
+    );
+    Ok(())
+}

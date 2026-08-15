@@ -125,9 +125,10 @@ fn execute_managed(
         return Err(error.into());
     }
 
+    let managed_arguments = invocation.managed_arguments(lease.build_dir())?;
     render::cargo_start(lease.arena_id(), lease.build_dir(), format)?;
     let child = ProcessCommand::new(invocation.program())
-        .args(invocation.arguments())
+        .args(managed_arguments)
         .current_dir(invocation.working_directory())
         .env("CARGO_BUILD_BUILD_DIR", lease.build_dir())
         .env_remove(SENTINEL_ENV)

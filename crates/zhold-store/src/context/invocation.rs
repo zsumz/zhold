@@ -117,6 +117,26 @@ impl CargoInvocation {
         Ok(prefix)
     }
 
+    /// Returns Cargo arguments with zhold's owned build directory at final precedence.
+    pub fn managed_arguments(&self, build_dir: &Path) -> Result<Vec<String>, StoreError> {
+        let build_dir = build_dir.to_str().ok_or_else(|| StoreError::NonUnicode {
+            kind: "managed Cargo build directory",
+            path: build_dir.to_path_buf(),
+        })?;
+        let quoted = serde_json::to_string(build_dir)
+            .map_err(|error| StoreError::InvalidCargoInvocation(error.to_string()))?;
+        let mut arguments = self.arguments.clone();
+        let insertion = arguments
+            .iter()
+            .position(|argument| argument == "--")
+            .unwrap_or(arguments.len());
+        arguments.splice(
+            insertion..insertion,
+            ["--config".to_owned(), format!("build.build-dir={quoted}")],
+        );
+        Ok(arguments)
+    }
+
     pub(crate) fn descriptor(&self) -> CommandDescriptor {
         CommandDescriptor::from_arguments(&self.arguments)
     }
