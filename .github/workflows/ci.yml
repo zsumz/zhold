@@ -47,8 +47,17 @@ jobs:
 
       - name: Install current stable Rust
         run: |
-          rustup toolchain install stable --profile minimal
+          rustup toolchain install stable --profile minimal --component clippy
           rustup default stable
 
+      - name: Enforce architecture boundaries
+        run: python scripts/guardrails.py
+
+      - name: Run cross-platform Clippy
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+
       - name: Run cross-platform tests
-        run: cargo test --workspace --all-features
+        run: cargo test --locked --workspace --all-features
+
+      - name: Verify the default command surface
+        run: cargo test --locked -p zhold --no-default-features default_help_excludes_experimental_control_plane
