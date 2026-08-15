@@ -7,25 +7,36 @@ use crate::{
 
 pub(crate) fn execute(cli: Cli) -> Result<ExitStatus, CliError> {
     let command = cli.command.unwrap_or(Command::Status);
-    let gc_budget = match &command {
-        Command::Gc {
-            size, trash_only, ..
-        } if !trash_only => Some(size.or(cli.budget).ok_or(CliError::MissingBudget)?),
-        _ => None,
-    };
     let root = match cli.store {
         Some(path) => path,
         None => Store::default_root()?,
     };
     let store = Store::open(root)?;
+    if let Command::Setup {
+        budget,
+        min_free,
+        build_reserve,
+    } = &command
+    {
+        return super::setup::execute(&store, *budget, *min_free, *build_reserve, cli.format);
+    }
+    let config = store.config()?;
+    let budget = cli.budget.or(config.arena_budget);
+    let gc_budget = match &command {
+        Command::Gc {
+            size, trash_only, ..
+        } if !trash_only => Some(size.or(budget).ok_or(CliError::MissingBudget)?),
+        _ => None,
+    };
     match command {
+        Command::Setup { .. } => Ok(ExitStatus::SUCCESS),
         Command::Cargo { arguments } => super::cargo::execute(
             &store,
             arguments,
             super::CargoLimits {
-                budget: cli.budget,
-                min_free: cli.min_free,
-                build_reserve: cli.build_reserve,
+                budget,
+                min_free: cli.min_free.or(config.min_filesystem_free),
+                build_reserve: cli.build_reserve.or(config.minimum_build_reservation),
                 max_arena_size: cli.max_arena_size,
             },
             cli.format,
@@ -77,6 +88,6 @@ pub(crate) fn execute(cli: Cli) -> Result<ExitStatus, CliError> {
             cli.format,
         ),
         Command::Hook { action } => super::hook::execute(&store, action, cli.format),
-        Command::Quota { action } => super::quota::execute(&store, &action, cli.budget, cli.format),
+        Command::Quota { action } => super::quota::execute(&store, &action, budget, cli.format),
     }
 }

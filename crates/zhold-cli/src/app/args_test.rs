@@ -4,6 +4,34 @@ use zhold_core::ByteSize;
 use super::{Cli, Command, HistoryCommand, HookCommand, QuotaCommand};
 
 #[test]
+fn parses_persistent_setup_defaults() -> Result<(), clap::Error> {
+    let parsed = Cli::try_parse_from([
+        "zhold",
+        "setup",
+        "200GiB",
+        "--min-free",
+        "25GiB",
+        "--build-reserve",
+        "2GiB",
+    ])?;
+    let Some(Command::Setup {
+        budget,
+        min_free,
+        build_reserve,
+    }) = parsed.command
+    else {
+        return Err(clap::Error::new(clap::error::ErrorKind::InvalidSubcommand));
+    };
+    assert_eq!(budget, ByteSize::from_bytes(200 * 1_024_u64.pow(3)));
+    assert_eq!(min_free, Some(ByteSize::from_bytes(25 * 1_024_u64.pow(3))));
+    assert_eq!(
+        build_reserve,
+        Some(ByteSize::from_bytes(2 * 1_024_u64.pow(3)))
+    );
+    Ok(())
+}
+
+#[test]
 fn parses_the_short_gc_command() -> Result<(), clap::Error> {
     let parsed = Cli::try_parse_from(["zhold", "gc", "200gb", "--dry-run"])?;
     let Some(Command::Gc { size, dry_run, .. }) = parsed.command else {

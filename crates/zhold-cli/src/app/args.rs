@@ -35,6 +35,17 @@ pub(crate) struct Cli {
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Command {
+    /// Persist simple defaults for governed Cargo builds.
+    Setup {
+        /// Steady-state active arena budget.
+        budget: ByteSize,
+        /// Emergency free-space floor checked before Cargo starts.
+        #[arg(long)]
+        min_free: Option<ByteSize>,
+        /// Minimum growth reservation before historical adjustment.
+        #[arg(long)]
+        build_reserve: Option<ByteSize>,
+    },
     /// Run Cargo in a leased, worktree-specific build arena.
     Cargo {
         /// Cargo command and arguments. The `--` separator is optional.

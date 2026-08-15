@@ -11,6 +11,7 @@ mod pin;
 mod quota;
 mod scan;
 mod selector;
+mod setup;
 mod status;
 
 #[cfg(test)]

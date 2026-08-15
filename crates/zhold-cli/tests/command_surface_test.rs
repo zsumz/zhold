@@ -3,6 +3,8 @@
 use std::{fs, io, path::Path, process::Command};
 
 use tempfile::tempdir;
+use zhold_core::ByteSize;
+use zhold_store::Store;
 
 #[test]
 fn help_and_version_are_successful_standard_output() -> Result<(), Box<dyn std::error::Error>> {
@@ -18,6 +20,28 @@ fn help_and_version_are_successful_standard_output() -> Result<(), Box<dyn std::
     assert!(version.status.success());
     assert_eq!(String::from_utf8(version.stdout)?, "zhold 0.0.1-rc.1\n");
     assert!(version.stderr.is_empty());
+    Ok(())
+}
+
+#[test]
+fn setup_persists_the_budget_used_by_later_commands() -> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let store = temporary.path().join("store");
+
+    let setup = command(&store, temporary.path(), &["setup", "200GiB"])
+        .env_remove("ZHOLD_BUDGET")
+        .output()?;
+    let gc = command(&store, temporary.path(), &["gc", "--dry-run"])
+        .env_remove("ZHOLD_BUDGET")
+        .output()?;
+
+    assert!(setup.status.success());
+    assert!(String::from_utf8(setup.stdout)?.contains("arena budget"));
+    assert!(gc.status.success());
+    assert_eq!(
+        Store::open(&store)?.config()?.arena_budget,
+        Some(ByteSize::from_bytes(200 * 1_024_u64.pow(3)))
+    );
     Ok(())
 }
 

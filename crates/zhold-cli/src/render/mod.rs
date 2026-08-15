@@ -2,6 +2,7 @@
 
 mod cargo;
 mod collection;
+mod config;
 mod doctor;
 mod explain;
 mod history;
@@ -17,6 +18,7 @@ pub(crate) use cargo::{
     cargo_size_limit_exceeded, cargo_start,
 };
 pub(crate) use collection::{collection, pin, post_build, preflight, trash};
+pub(crate) use config::setup;
 pub(crate) use doctor::doctor;
 pub(crate) use explain::explain;
 pub(crate) use history::{
