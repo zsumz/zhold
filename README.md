@@ -45,6 +45,10 @@ zhold scan ../projects
 zhold doctor
 ```
 
+If status reports a `suspect` arena after its sentinel died, first terminate or
+otherwise prove the orphaned Cargo process tree is gone, then acknowledge that
+fact explicitly with `zhold recover <arena> --terminated`.
+
 ## What zhold bounds
 
 The default is a conservative steady-state arena budget, not an

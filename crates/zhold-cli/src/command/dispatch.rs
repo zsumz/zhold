@@ -76,6 +76,7 @@ pub(crate) fn execute(cli: Cli) -> Result<ExitStatus, CliError> {
             cli.format,
         ),
         Command::Unpin { arena } => super::pin::execute(&store, &arena, false, None, cli.format),
+        Command::Recover { arena, .. } => super::recover::execute(&store, &arena, cli.format),
         Command::Doctor => super::doctor::execute(&store, cli.format),
         Command::Explain { arena } => super::explain::execute(&store, &arena, cli.format),
         #[cfg(feature = "experimental")]

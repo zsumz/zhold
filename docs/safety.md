@@ -61,8 +61,12 @@ drift are checked before an adopted quota participates in admission.
 ## Recovery
 
 - A dead process releases OS locks automatically.
+- An unfinished build whose sentinel lease vanished becomes suspect; its bytes
+  and reservation remain protected until `zhold recover <arena> --terminated`
+  records the operator's process-tree confirmation.
 - A dropped lease records a terminated run when primary metadata remains valid.
 - Torn JSON publication can recover from the last synchronized backup.
-- Retired directories that could not be removed remain in owned trash.
+- Retired directories that could not be removed retain an external journal in
+  `trash-index` so partially deleting their contents cannot erase retry proof.
 - A dirty history index is rebuilt from validated immutable receipts.
 - Invalid or foreign entries are reported and never deleted as recovery work.

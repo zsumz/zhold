@@ -7,6 +7,7 @@ mod doctor;
 mod finalization;
 mod history;
 mod initialization;
+mod recovery;
 mod service;
 
 #[cfg(test)]

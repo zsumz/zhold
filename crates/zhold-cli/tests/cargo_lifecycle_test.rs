@@ -196,6 +196,13 @@ fn sentinel_death_keeps_a_live_cargo_arena_suspect_and_uncollectible()
         )
         .into());
     }
+    let selector = inventory.arenas[0].record.id.to_string();
+    let recovered = zhold(
+        &project,
+        &store_root,
+        &["recover", &selector, "--terminated"],
+    )?;
+    let recovered_state = only_state(&store_root)?;
 
     assert!(
         cargo_survived,
@@ -205,6 +212,8 @@ fn sentinel_death_keeps_a_live_cargo_arena_suspect_and_uncollectible()
     assert_eq!(inventory.arenas.len(), 1);
     assert_eq!(inventory.arenas[0].record.state(), ArenaState::Suspect);
     assert!(inventory.reserved > zhold_core::ByteSize::ZERO);
+    assert!(recovered.status.success());
+    assert_eq!(recovered_state, ArenaState::Idle);
     Ok(())
 }
 
@@ -283,7 +292,10 @@ fn wait_for_state(store: &Path, expected: ArenaState, timeout: Duration) -> Resu
     }
     Err(io::Error::new(
         io::ErrorKind::TimedOut,
-        format!("arena did not reach {expected:?}"),
+        format!(
+            "arena did not reach {expected:?}; last observation: {:?}",
+            only_state(store)
+        ),
     ))
 }
 

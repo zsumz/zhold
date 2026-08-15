@@ -12,6 +12,7 @@ mod hook;
 mod pin;
 #[cfg(feature = "experimental")]
 mod quota;
+mod recover;
 mod scan;
 mod selector;
 mod setup;

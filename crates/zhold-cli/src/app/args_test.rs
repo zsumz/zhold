@@ -76,6 +76,21 @@ fn no_command_selects_status_at_dispatch_time() -> Result<(), clap::Error> {
 }
 
 #[test]
+fn suspect_recovery_requires_process_termination_confirmation()
+-> Result<(), Box<dyn std::error::Error>> {
+    assert!(Cli::try_parse_from(["zhold", "recover", "abc"]).is_err());
+    let parsed = Cli::try_parse_from(["zhold", "recover", "abc", "--terminated"])?;
+    assert!(matches!(
+        parsed.command,
+        Some(Command::Recover {
+            terminated: true,
+            ..
+        })
+    ));
+    Ok(())
+}
+
+#[test]
 fn configured_budget_remains_global_to_gc() -> Result<(), clap::Error> {
     let parsed = Cli::try_parse_from(["zhold", "--budget", "200GiB", "gc", "--dry-run"])?;
     let Some(Command::Gc { size, .. }) = parsed.command else {

@@ -101,6 +101,9 @@ pub enum StoreError {
         "managed arena `{0}` has an unfinished build with no live lease; recover it explicitly before reuse"
     )]
     ArenaSuspect(String),
+    /// An arena recovery was requested for an arena that is not suspect.
+    #[error("managed arena `{0}` is not awaiting suspect-build recovery")]
+    ArenaNotSuspect(String),
     /// A registered worktree lifecycle state denies new builds.
     #[error("worktree admission is blocked for `{path}`: {state}")]
     WorktreeAdmissionBlocked {

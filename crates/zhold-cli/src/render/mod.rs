@@ -12,6 +12,7 @@ mod inventory;
 mod json;
 mod output;
 mod quota;
+mod recovery;
 mod scan;
 
 pub(crate) use cargo::{
@@ -30,4 +31,5 @@ pub(crate) use inventory::inventory;
 pub(crate) use quota::post_build as quota_post_build;
 #[cfg(feature = "experimental")]
 pub(crate) use quota::{adoption as quota_adoption, plan as quota_plan, status as quota_status};
+pub(crate) use recovery::recovery;
 pub(crate) use scan::scan;

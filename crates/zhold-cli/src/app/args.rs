@@ -85,6 +85,14 @@ pub(crate) enum Command {
         /// Unique arena ID prefix from `zhold status`.
         arena: String,
     },
+    /// Recover a suspect arena after confirming its orphaned process tree is gone.
+    Recover {
+        /// Unique suspect arena ID prefix from `zhold status`.
+        arena: String,
+        /// Confirm that the orphaned Cargo process tree has terminated.
+        #[arg(long, required = true)]
+        terminated: bool,
+    },
     /// Validate store ownership, metadata, and retirement health.
     Doctor,
     /// Explain one arena's identity, protection, and collection state.

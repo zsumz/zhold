@@ -23,8 +23,13 @@ pub(super) fn open_marker(layout: &StoreLayout) -> Result<StoreMarker, StoreErro
                     reason: "store marker is not a real file".to_owned(),
                 });
             }
-            let _initialization = ExclusiveFileLock::acquire(&layout.initialization_lock())?;
-            let marker = load_marker(layout)?;
+            let marker: StoreMarker = read_json(&marker_path)?;
+            let marker = if marker.schema_version == 1 {
+                let _initialization = ExclusiveFileLock::acquire(&layout.initialization_lock())?;
+                load_marker(layout)?
+            } else {
+                validate_marker(marker, marker_path)?
+            };
             verify_filesystem_capabilities(layout.root())?;
             Ok(marker)
         }
