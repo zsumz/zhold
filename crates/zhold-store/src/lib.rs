@@ -29,10 +29,11 @@ pub use collection::{
 pub use context::{BuildContext, CargoInvocation, ContextResolver, WorktreeContext};
 pub use error::StoreError;
 pub use history::{
-    BuildFinalization, BuildReceipt, CollectionReceipt, CollectionReceiptSource, HistoryFinding,
-    HistoryPayload, HistoryPolicyDocument, HistoryPruneReport, HistoryPruneRequest, HistoryQuery,
-    HistoryReceipt, HistoryReport, HistorySummary, HistoryWarning, HistoryWarningEvent,
-    HistoryWrite, HookReceipt, QuotaReceipt, QuotaReceiptAction,
+    BuildFinalization, BuildReceipt, CollectionReceipt, CollectionReceiptSource,
+    FinalizationWarning, FinalizationWarningEvent, HistoryFinding, HistoryPayload,
+    HistoryPolicyDocument, HistoryPruneReport, HistoryPruneRequest, HistoryQuery, HistoryReceipt,
+    HistoryReport, HistorySummary, HistoryWarning, HistoryWarningEvent, HistoryWrite, HookReceipt,
+    QuotaReceipt, QuotaReceiptAction,
 };
 pub use inventory::{Inventory, InventoryEntry, InventoryFinding};
 pub use quota::{

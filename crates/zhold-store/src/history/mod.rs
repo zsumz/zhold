@@ -13,9 +13,9 @@ mod history_test;
 
 pub(crate) use model::HistoryDraft;
 pub use model::{
-    BuildFinalization, HistoryFinding, HistoryPolicyDocument, HistoryPruneReport,
-    HistoryPruneRequest, HistoryQuery, HistoryReport, HistorySummary, HistoryWarning,
-    HistoryWarningEvent, HistoryWrite,
+    BuildFinalization, FinalizationWarning, FinalizationWarningEvent, HistoryFinding,
+    HistoryPolicyDocument, HistoryPruneReport, HistoryPruneRequest, HistoryQuery, HistoryReport,
+    HistorySummary, HistoryWarning, HistoryWarningEvent, HistoryWrite,
 };
 pub(crate) use prune::prune;
 pub(crate) use reader::{history_policy, read_history, summary};

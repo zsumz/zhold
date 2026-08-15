@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use zhold_core::{ArenaId, BuildOutcome, ByteSize};
 
 use crate::{
-    BuildFinalization, Store, StoreError,
+    BuildFinalization, FinalizationWarning, FinalizationWarningEvent, Store, StoreError,
     history::{HistoryDraft, persist},
     io::measure_tree,
     lock::ExclusiveFileLock,
@@ -100,7 +100,7 @@ impl ArenaLease {
             .worktree
             .as_ref()
             .and_then(|admission| admission.integration.as_ref());
-        let build = self.store.finish_primary(
+        let primary = self.store.finish_primary(
             &self.arena_id,
             outcome,
             peak,
@@ -111,18 +111,35 @@ impl ArenaLease {
         )?;
         self.finished = true;
         self.release_locks();
-        self.pending_history.push(build);
+        let warnings = self.learn_reservation(primary.command_class, primary.observed_growth);
+        self.pending_history.push(primary.history);
         let history = self
             .pending_history
             .drain(..)
             .map(|draft| persist(&self.store, draft))
             .collect();
-        Ok(BuildFinalization { history })
+        Ok(BuildFinalization { warnings, history })
     }
 
     fn release_locks(&mut self) {
         drop(self.arena_lock.take());
         drop(self.worktree.take());
+    }
+
+    fn learn_reservation(
+        &self,
+        command_class: zhold_core::CargoCommandClass,
+        observed_growth: ByteSize,
+    ) -> Vec<FinalizationWarning> {
+        self.store
+            .record_reservation_growth(command_class, observed_growth)
+            .err()
+            .map_or_else(Vec::new, |error| {
+                vec![FinalizationWarning {
+                    event: FinalizationWarningEvent::ReservationLearningFailed,
+                    message: error.to_string(),
+                }]
+            })
     }
 }
 
@@ -147,8 +164,9 @@ impl Drop for ArenaLease {
             integration,
         );
         self.release_locks();
-        if let Ok(build) = build {
-            self.pending_history.push(build);
+        if let Ok(primary) = build {
+            let _warnings = self.learn_reservation(primary.command_class, primary.observed_growth);
+            self.pending_history.push(primary.history);
             for draft in self.pending_history.drain(..) {
                 let _ignored = persist(&self.store, draft);
             }

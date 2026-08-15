@@ -1,4 +1,4 @@
-use zhold_core::{ArenaId, BuildOutcome, ByteSize};
+use zhold_core::{ArenaId, BuildOutcome, ByteSize, CargoCommandClass};
 
 use crate::{
     BuildReceipt, Store, StoreError,
@@ -8,6 +8,12 @@ use crate::{
     manifest::ArenaManifest,
     time::{unix_milliseconds, unix_seconds},
 };
+
+pub(crate) struct PrimaryFinalization {
+    pub(crate) history: HistoryDraft,
+    pub(crate) command_class: CargoCommandClass,
+    pub(crate) observed_growth: ByteSize,
+}
 
 impl Store {
     #[allow(clippy::too_many_arguments)]
@@ -20,7 +26,7 @@ impl Store {
         final_bytes: ByteSize,
         started_at: u64,
         integration: Option<&crate::WorktreeIntegration>,
-    ) -> Result<HistoryDraft, StoreError> {
+    ) -> Result<PrimaryFinalization, StoreError> {
         let _metadata_lock = ExclusiveFileLock::acquire(&self.layout.metadata_lock(id))?;
         let manifest_path = self.layout.manifest(id);
         let mut manifest: ArenaManifest = read_json(&manifest_path)?;
@@ -32,8 +38,7 @@ impl Store {
         manifest.finish(outcome, peak, final_bytes, finished_seconds);
         write_json(&manifest_path, &manifest)?;
         let observed_growth = std::cmp::max(peak, final_bytes).saturating_sub(initial_bytes);
-        self.record_reservation_growth(command_class, observed_growth)?;
-        Ok(HistoryDraft::build(
+        let history = HistoryDraft::build(
             BuildReceipt {
                 arena_id: manifest.arena_id,
                 repository_id: manifest.repository_id,
@@ -59,6 +64,11 @@ impl Store {
                 session: None,
             },
             integration,
-        ))
+        );
+        Ok(PrimaryFinalization {
+            history,
+            command_class,
+            observed_growth,
+        })
     }
 }

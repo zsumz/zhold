@@ -3,7 +3,9 @@ use std::io::{self, Write};
 use serde::Serialize;
 #[cfg(feature = "experimental")]
 use zhold_core::HistoryPolicy;
-use zhold_store::{BuildFinalization, HistoryWarning, HistoryWarningEvent};
+use zhold_store::{
+    BuildFinalization, FinalizationWarningEvent, HistoryWarning, HistoryWarningEvent,
+};
 #[cfg(feature = "experimental")]
 use zhold_store::{HistoryPruneReport, HistoryReport};
 
@@ -41,6 +43,26 @@ pub(crate) fn finalization(
     finalization: &BuildFinalization,
     format: OutputFormat,
 ) -> Result<(), CliError> {
+    for warning in &finalization.warnings {
+        let event = match warning.event {
+            FinalizationWarningEvent::ReservationLearningFailed => "reservation_learning_failed",
+        };
+        if matches!(format, OutputFormat::Json) {
+            #[derive(Serialize)]
+            struct Event<'a> {
+                event: &'static str,
+                message: &'a str,
+            }
+            json::write_stderr(&Event {
+                event,
+                message: &warning.message,
+            })?;
+        } else {
+            let stderr = io::stderr();
+            let mut output = stderr.lock();
+            writeln!(output, "zhold  {event}: {}", warning.message).map_err(output_error)?;
+        }
+    }
     for write in &finalization.history {
         warnings(&write.warnings, format)?;
     }

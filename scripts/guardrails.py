@@ -244,6 +244,12 @@ def check_capability_boundaries(checks: Checks) -> None:
             f"{relative(path)} can persist an unbounded raw command vector",
         )
 
+    finalization = store / "store" / "finalization.rs"
+    checks.require(
+        "record_reservation_growth" not in code(finalization),
+        "authoritative store finalization may not update advisory reservation profiles",
+    )
+
 
 def check_delimiters(checks: Checks) -> None:
     pairs = {"(": ")", "[": "]", "{": "}"}

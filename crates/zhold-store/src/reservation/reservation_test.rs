@@ -3,7 +3,7 @@ use std::fs;
 use tempfile::tempdir;
 use zhold_core::{BuildOutcome, ByteSize};
 
-use crate::{CargoInvocation, Store, test_support};
+use crate::{CargoInvocation, Store, io::read_json, manifest::ArenaManifest, test_support};
 
 #[test]
 fn completed_growth_increases_the_next_command_reservation()
@@ -56,6 +56,30 @@ fn profile_uses_p95_and_previous_growth() -> Result<(), Box<dyn std::error::Erro
     assert_eq!(
         store.recommended_reservation(&invocation, ByteSize::from_bytes(30))?,
         ByteSize::from_bytes(40)
+    );
+    Ok(())
+}
+
+#[test]
+fn advisory_learning_failure_preserves_the_committed_outcome()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let project = tempdir()?;
+    let store = Store::open(temporary.path().join("store"))?;
+    let context = test_support::context(project.path())?;
+    let invocation = test_support::invocation(project.path())?;
+    let lease = store.lease(&context, &invocation)?;
+    fs::create_dir(store.layout.reservation_profile())?;
+
+    let finalization = lease.finish(BuildOutcome::Succeeded)?;
+    let manifest: ArenaManifest = read_json(&store.layout.manifest(context.arena_id()))?;
+
+    assert_eq!(manifest.last_outcome, Some(BuildOutcome::Succeeded));
+    assert!(manifest.last_finished_at.is_some());
+    assert_eq!(finalization.warnings.len(), 1);
+    assert_eq!(
+        finalization.warnings[0].event,
+        super::super::FinalizationWarningEvent::ReservationLearningFailed
     );
     Ok(())
 }

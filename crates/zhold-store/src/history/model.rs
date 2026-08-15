@@ -152,9 +152,28 @@ pub struct HistoryWrite {
     pub warnings: Vec<HistoryWarning>,
 }
 
+/// Nonfatal auxiliary finalization warning category.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FinalizationWarningEvent {
+    /// The authoritative manifest committed, but reservation learning failed.
+    ReservationLearningFailed,
+}
+
+/// Failure of non-authoritative work after a lifecycle commit.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct FinalizationWarning {
+    /// Stable warning category.
+    pub event: FinalizationWarningEvent,
+    /// Bounded diagnostic explanation.
+    pub message: String,
+}
+
 /// Nonfatal history results produced while finalizing one managed build.
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct BuildFinalization {
+    /// Auxiliary failures that did not alter authoritative lifecycle state.
+    pub warnings: Vec<FinalizationWarning>,
     /// Preflight collection and build receipt publication results, in commit order.
     pub history: Vec<HistoryWrite>,
 }
