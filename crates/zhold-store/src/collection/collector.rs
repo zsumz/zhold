@@ -28,6 +28,9 @@ pub(crate) fn collect_locked(
     dry_run: bool,
     measurement: ArenaMeasurement,
 ) -> Result<CollectionReport, StoreError> {
+    if !dry_run {
+        let _reconciliation = super::reconcile::reconcile_locked(store, false)?;
+    }
     let inventory = read_arena_snapshot(store, measurement)?;
     if inventory.uncertain_owned > 0 {
         let reason = inventory.findings.first().map_or_else(

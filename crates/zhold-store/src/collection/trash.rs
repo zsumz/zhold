@@ -1,131 +1,116 @@
-use std::{fs, path::Path, str::FromStr};
+use std::{fs, path::Path};
 
-use uuid::Uuid;
-use zhold_core::{ArenaId, ByteSize};
+use zhold_core::ByteSize;
 
-use super::{TrashEntry, TrashOutcome, TrashReport};
+use super::{TrashEntry, TrashOutcome, TrashReport, reconcile::reconcile_locked};
 use crate::{
     Store, StoreError,
     inventory::ensure_real_contained_directory,
     io::{measure_tree, read_json, remove_json, remove_tree},
     lock::ExclusiveFileLock,
-    manifest::RetirementRecord,
+    manifest::{ArenaManifest, RetirementRecord},
 };
 
 pub(crate) fn retry_trash(store: &Store, dry_run: bool) -> Result<TrashReport, StoreError> {
     let _collection_lock = ExclusiveFileLock::acquire(&store.layout.collection_lock())?;
-    let root =
-        store.layout.root().canonicalize().map_err(|error| {
-            StoreError::io("canonicalize store root", store.layout.root(), error)
-        })?;
-    let trash = store.layout.trash();
-    ensure_real_contained_directory(&trash, &root)?;
-    let paths = entry_paths(&trash)?;
-    let before = measure_paths(&paths);
-    let mut reclaimed = ByteSize::ZERO;
-    let mut entries = Vec::new();
-    for path in paths {
-        let attempt =
-            inspect_entry(store, &path, &trash, &root).and_then(|(arena_id, record_path, size)| {
-                let Some(_arena_lock) =
-                    ExclusiveFileLock::try_acquire(&store.layout.arena_lock(&arena_id))?
-                else {
-                    return Err(StoreError::ArenaActive(arena_id.to_string()));
-                };
-                if dry_run {
-                    Ok((size, TrashOutcome::WouldDelete))
-                } else {
-                    remove_tree(&path)?;
-                    remove_json(&record_path)?;
-                    reclaimed = reclaimed.saturating_add(size);
-                    Ok((size, TrashOutcome::Deleted))
-                }
-            });
-        let (size, outcome) = match attempt {
-            Ok(value) => value,
-            Err(error) => (
-                ByteSize::ZERO,
-                TrashOutcome::Skipped {
-                    error: error.to_string(),
-                },
-            ),
-        };
-        entries.push(TrashEntry {
-            path,
-            size,
-            outcome,
-        });
-    }
+    let reconciliation = reconcile_locked(store, dry_run)?;
     let remaining = if dry_run {
-        let eligible = entries
+        let eligible = reconciliation
+            .entries
             .iter()
-            .filter(|entry| matches!(entry.outcome, TrashOutcome::WouldDelete))
+            .filter(|entry| {
+                entry.path.parent() == Some(store.layout.trash().as_path())
+                    && matches!(entry.outcome, TrashOutcome::WouldDelete)
+            })
             .fold(ByteSize::ZERO, |sum, entry| sum.saturating_add(entry.size));
-        before.saturating_sub(eligible)
+        reconciliation.before.saturating_sub(eligible)
     } else {
-        measure_paths(&entry_paths(&trash)?)
+        reconciliation.remaining
     };
     Ok(TrashReport {
         dry_run,
-        before,
-        reclaimed,
+        before: reconciliation.before,
+        reclaimed: reconciliation.reclaimed,
         remaining,
-        entries,
+        entries: reconciliation.entries,
         history: crate::HistoryWrite::default(),
     })
 }
 
-fn inspect_entry(
+pub(super) fn resume_retirement(
     store: &Store,
-    path: &Path,
-    trash: &Path,
     root: &Path,
-) -> Result<(ArenaId, std::path::PathBuf, ByteSize), StoreError> {
-    let Some((arena_id, retirement_id)) = retired_identity(path) else {
-        return Err(StoreError::InvalidOwnership {
-            path: path.to_path_buf(),
-            reason: "retirement entry name does not prove zhold ownership".to_owned(),
-        });
+    record_path: &Path,
+    record: &RetirementRecord,
+    dry_run: bool,
+) -> Result<(TrashEntry, ByteSize), StoreError> {
+    let Some(_arena) = ExclusiveFileLock::try_acquire(&store.layout.arena_lock(record.arena_id()))?
+    else {
+        return Err(StoreError::ArenaActive(record.arena_id().to_string()));
     };
-    if path.parent() != Some(trash) {
+    let _metadata = ExclusiveFileLock::acquire(&store.layout.metadata_lock(record.arena_id()))?;
+    ensure_real_contained_directory(record.original_path(), root)?;
+    let manifest_path = store.layout.manifest(record.arena_id());
+    let manifest: ArenaManifest = read_json(&manifest_path)?;
+    manifest.validate(store.marker.store_id, record.arena_id(), manifest_path)?;
+    if manifest.retirement_id != Some(record.retirement_id())
+        || manifest.revision != record.retired_revision()
+    {
         return Err(StoreError::InvalidOwnership {
-            path: path.to_path_buf(),
-            reason: "retirement entry is not an immediate child of owned trash".to_owned(),
+            path: record_path.to_path_buf(),
+            reason: "active arena no longer matches its retirement journal".to_owned(),
         });
     }
-    ensure_real_contained_directory(path, root)?;
-    let record_path = store.layout.retirement_record(retirement_id);
-    let record: RetirementRecord = read_json(&record_path)?;
-    record.validate(store, &arena_id, retirement_id)?;
-    Ok((arena_id, record_path, measure_tree(path)?))
+    let size = measure_tree(record.original_path())?;
+    if dry_run {
+        return Ok((
+            delete_entry(record.original_path(), size, true),
+            ByteSize::ZERO,
+        ));
+    }
+    fs::rename(record.original_path(), record.trash_path()).map_err(|error| {
+        StoreError::io(
+            "resume atomic arena retirement",
+            record.original_path(),
+            error,
+        )
+    })?;
+    remove_tree(record.trash_path())?;
+    remove_json(record_path)?;
+    Ok((delete_entry(record.trash_path(), size, false), size))
 }
 
-fn retired_identity(path: &Path) -> Option<(ArenaId, Uuid)> {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .and_then(|name| name.split_once('-'))
-        .and_then(|(arena, nonce)| {
-            ArenaId::from_str(arena)
-                .ok()
-                .zip(Uuid::parse_str(nonce).ok())
-        })
+pub(super) fn delete_retired(
+    store: &Store,
+    root: &Path,
+    record_path: &Path,
+    record: &RetirementRecord,
+    dry_run: bool,
+) -> Result<(TrashEntry, ByteSize), StoreError> {
+    let Some(_arena) = ExclusiveFileLock::try_acquire(&store.layout.arena_lock(record.arena_id()))?
+    else {
+        return Err(StoreError::ArenaActive(record.arena_id().to_string()));
+    };
+    ensure_real_contained_directory(record.trash_path(), root)?;
+    let size = measure_tree(record.trash_path())?;
+    if !dry_run {
+        remove_tree(record.trash_path())?;
+        remove_json(record_path)?;
+    }
+    Ok((
+        delete_entry(record.trash_path(), size, dry_run),
+        if dry_run { ByteSize::ZERO } else { size },
+    ))
 }
 
-fn entry_paths(path: &Path) -> Result<Vec<std::path::PathBuf>, StoreError> {
-    let mut paths = fs::read_dir(path)
-        .map_err(|error| StoreError::io("read retirement directory", path, error))?
-        .map(|entry| {
-            entry
-                .map(|entry| entry.path())
-                .map_err(|error| StoreError::io("read retirement entry", path, error))
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    paths.sort();
-    Ok(paths)
-}
-
-fn measure_paths(paths: &[std::path::PathBuf]) -> ByteSize {
-    paths.iter().fold(ByteSize::ZERO, |sum, path| {
-        measure_tree(path).map_or(sum, |size| sum.saturating_add(size))
-    })
+fn delete_entry(path: &Path, size: ByteSize, dry_run: bool) -> TrashEntry {
+    TrashEntry {
+        path: path.to_path_buf(),
+        size,
+        outcome: if dry_run {
+            TrashOutcome::WouldDelete
+        } else {
+            TrashOutcome::Deleted
+        },
+    }
 }

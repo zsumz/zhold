@@ -187,7 +187,16 @@ fn read_entry(
         LockState::Held
     );
     let unfinished = manifest.is_unfinished();
-    let (size, size_quality, finding) = observed_size(arena_path, &manifest, measurement);
+    let (size, size_quality, mut finding) = observed_size(arena_path, &manifest, measurement);
+    if let Some(retirement_id) = manifest.retirement_id {
+        let reason = format!("arena has interrupted retirement intent {retirement_id}");
+        finding = Some(InventoryFinding {
+            path: arena_path.to_path_buf(),
+            reason: finding.map_or(reason.clone(), |prior| {
+                format!("{}; {reason}", prior.reason)
+            }),
+        });
+    }
     let pinned = manifest.is_pinned_at(observed_at);
     let integration =
         crate::worktree::read_for_ids(store, &manifest.repository_id, &manifest.worktree_id)?;

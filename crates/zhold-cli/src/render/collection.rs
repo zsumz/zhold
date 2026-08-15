@@ -183,6 +183,8 @@ pub(crate) fn trash(report: &TrashReport, format: OutputFormat) -> Result<(), Cl
         let outcome = match &entry.outcome {
             TrashOutcome::WouldDelete => "would delete".to_owned(),
             TrashOutcome::Deleted => "deleted".to_owned(),
+            TrashOutcome::WouldRepair => "would repair".to_owned(),
+            TrashOutcome::Repaired => "repaired".to_owned(),
             TrashOutcome::Skipped { error } => format!("skipped: {error}"),
         };
         writeln!(

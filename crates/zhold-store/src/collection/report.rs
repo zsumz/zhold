@@ -103,6 +103,10 @@ pub enum TrashOutcome {
     WouldDelete,
     /// Recursive no-follow deletion completed.
     Deleted,
+    /// Dry-run proved interrupted retirement metadata can be repaired.
+    WouldRepair,
+    /// Interrupted retirement metadata was repaired without deleting an arena.
+    Repaired,
     /// Validation or deletion failed closed.
     Skipped {
         /// Failure explanation.

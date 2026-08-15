@@ -85,6 +85,22 @@ impl RetirementRecord {
         self.retired_size
     }
 
+    pub(crate) fn arena_id(&self) -> &ArenaId {
+        &self.arena_id
+    }
+
+    pub(crate) const fn retirement_id(&self) -> Uuid {
+        self.retirement_id
+    }
+
+    pub(crate) const fn retired_revision(&self) -> u64 {
+        self.retired_revision
+    }
+
+    pub(crate) fn original_path(&self) -> &std::path::Path {
+        &self.original_path
+    }
+
     pub(crate) fn trash_path(&self) -> &std::path::Path {
         &self.trash_path
     }

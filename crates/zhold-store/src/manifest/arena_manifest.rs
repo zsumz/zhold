@@ -226,6 +226,17 @@ impl ArenaManifest {
         self.revision = self.revision.saturating_add(1);
         self.retirement_id = Some(retirement_id);
     }
+
+    pub(crate) fn clear_retirement(&mut self, retirement_id: Uuid) -> bool {
+        if self.retirement_id == Some(retirement_id) {
+            self.schema_version = ARENA_SCHEMA_VERSION;
+            self.revision = self.revision.saturating_add(1);
+            self.retirement_id = None;
+            true
+        } else {
+            false
+        }
+    }
 }
 
 fn context_path<'a>(path: &'a std::path::Path, kind: &'static str) -> Result<&'a str, StoreError> {

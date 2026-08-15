@@ -78,6 +78,10 @@ fn cached_trash(store: &crate::Store) -> Result<(ByteSize, Vec<InventoryFinding>
     let mut total = ByteSize::ZERO;
     let mut owned_paths = BTreeSet::new();
     let mut findings = Vec::new();
+    let root =
+        store.layout.root().canonicalize().map_err(|error| {
+            StoreError::io("canonicalize store root", store.layout.root(), error)
+        })?;
     let index = store.layout.trash_index();
     for entry in fs::read_dir(&index)
         .map_err(|error| StoreError::io("read retirement journal index", &index, error))?
@@ -87,7 +91,8 @@ fn cached_trash(store: &crate::Store) -> Result<(ByteSize, Vec<InventoryFinding>
             .path();
         let result = read_json::<RetirementRecord>(&path).and_then(|record| {
             record.validate_journal(store, &path)?;
-            if record.trash_path().is_dir() {
+            if fs::symlink_metadata(record.trash_path()).is_ok() {
+                ensure_real_contained_directory(record.trash_path(), &root)?;
                 total = total.saturating_add(record.retired_size());
                 owned_paths.insert(record.trash_path().to_path_buf());
             } else {
