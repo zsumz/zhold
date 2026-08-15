@@ -94,6 +94,25 @@ fn a_command_rejected_before_spawn_does_not_train_reservations()
 }
 
 #[test]
+fn a_spawned_command_cannot_be_finalized_as_not_started() -> Result<(), Box<dyn std::error::Error>>
+{
+    let temporary = tempdir()?;
+    let project = tempdir()?;
+    let store = Store::open(temporary.path().join("store"))?;
+    let context = test_support::context(project.path())?;
+    let invocation = test_support::invocation(project.path())?;
+    let mut lease = store.lease(&context, &invocation)?;
+    lease.mark_spawned();
+
+    lease.finish_not_started()?;
+
+    let manifest: ArenaManifest = read_json(&store.layout.manifest(context.arena_id()))?;
+    assert_eq!(manifest.last_outcome, Some(BuildOutcome::Terminated));
+    assert!(store.layout.reservation_profile().is_file());
+    Ok(())
+}
+
+#[test]
 fn absent_final_measurement_preserves_the_durable_size() -> Result<(), Box<dyn std::error::Error>> {
     let temporary = tempdir()?;
     let project = tempdir()?;

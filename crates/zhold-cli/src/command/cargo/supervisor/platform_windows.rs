@@ -23,7 +23,10 @@ pub(in crate::command::cargo) struct PlatformSupervisor {
 }
 
 impl PlatformSupervisor {
-    pub(in crate::command::cargo) fn spawn(command: &mut Command) -> io::Result<Self> {
+    pub(in crate::command::cargo) fn spawn(
+        command: &mut Command,
+        spawned: impl FnOnce(),
+    ) -> io::Result<Self> {
         let interrupted = Arc::new(AtomicBool::new(false));
         let signal_ids = register_handlers(&interrupted)?;
         let child = match command.group().kill_on_drop(true).spawn() {
@@ -33,6 +36,7 @@ impl PlatformSupervisor {
                 return Err(error);
             }
         };
+        spawned();
         Ok(Self {
             child,
             signal_ids,

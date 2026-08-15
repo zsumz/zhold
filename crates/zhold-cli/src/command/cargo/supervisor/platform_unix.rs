@@ -26,12 +26,17 @@ pub(in crate::command::cargo) struct PlatformSupervisor {
     group: Pid,
     leader_status: Option<ExitStatus>,
     forwarder: SignalForwarder,
+    complete: bool,
 }
 
 impl PlatformSupervisor {
-    pub(in crate::command::cargo) fn spawn(command: &mut Command) -> io::Result<Self> {
+    pub(in crate::command::cargo) fn spawn(
+        command: &mut Command,
+        spawned: impl FnOnce(),
+    ) -> io::Result<Self> {
         let signals = Signals::new([SIGINT, SIGTERM, SIGHUP, SIGQUIT])?;
         let mut child = command.group_spawn()?;
+        spawned();
         let group = match process_group(child.id()) {
             Ok(group) => group,
             Err(error) => return cleanup_failed_spawn(&mut child, error),
@@ -45,6 +50,7 @@ impl PlatformSupervisor {
             group,
             leader_status: None,
             forwarder,
+            complete: false,
         })
     }
 
@@ -55,6 +61,7 @@ impl PlatformSupervisor {
         }
         if self.leader_status.is_some() && !group_alive(self.group)? {
             self.forwarder.stop()?;
+            self.complete = true;
             return Ok(self.leader_status);
         }
         Ok(None)
@@ -70,11 +77,21 @@ impl PlatformSupervisor {
         while group_alive(self.group)? {
             thread::sleep(std::time::Duration::from_millis(10));
         }
-        self.forwarder.stop()
+        self.forwarder.stop()?;
+        self.complete = true;
+        Ok(())
     }
 
     pub(in crate::command::cargo) fn was_interrupted(&self) -> bool {
         self.forwarder.was_interrupted()
+    }
+}
+
+impl Drop for PlatformSupervisor {
+    fn drop(&mut self) {
+        if !self.complete {
+            let _cleanup = self.terminate_and_wait();
+        }
     }
 }
 

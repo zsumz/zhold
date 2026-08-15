@@ -95,7 +95,7 @@ fn execute_managed(
     let minimum_reservation = limits.build_reserve.unwrap_or(DEFAULT_BUILD_RESERVATION);
     let reservation = store.recommended_reservation(&invocation, minimum_reservation)?;
     let budget = limits.budget;
-    let (lease, collection) = store.lease_reserved_and_collect(
+    let (mut lease, collection) = store.lease_reserved_and_collect(
         &context,
         &invocation,
         reservation,
@@ -105,7 +105,7 @@ fn execute_managed(
     if !collection.budget_met {
         let after = collection.after;
         let reserved = collection.reserved;
-        finish_before_error(lease, format)?;
+        finish_after_error(lease, format)?;
         return Err(CliError::BudgetUnmet {
             after,
             reserved,
@@ -115,7 +115,7 @@ fn execute_managed(
     if let Some(minimum) = limits.min_free {
         let available = store.available_space()?;
         if available < minimum {
-            finish_before_error(lease, format)?;
+            finish_after_error(lease, format)?;
             return Err(CliError::InsufficientFreeSpace { available, minimum });
         }
     }
@@ -127,11 +127,11 @@ fn execute_managed(
         .current_dir(invocation.working_directory())
         .env("CARGO_BUILD_BUILD_DIR", lease.build_dir())
         .env_remove(SENTINEL_ENV);
-    let child = supervisor::CargoSupervisor::spawn(&mut command);
+    let child = supervisor::CargoSupervisor::spawn(&mut command, || lease.mark_spawned());
     let mut child = match child {
         Ok(value) => value,
         Err(source) => {
-            finish_before_error(lease, format)?;
+            finish_after_error(lease, format)?;
             return Err(CliError::Spawn {
                 directory: working_directory,
                 source: Box::new(source),
@@ -142,7 +142,7 @@ fn execute_managed(
     let status = match wait_for_cargo(&mut child) {
         Ok(value) => value,
         Err(source) => {
-            finish_before_error(lease, format)?;
+            finish_after_error(lease, format)?;
             return Err(CliError::Wait {
                 directory: working_directory,
                 source: Box::new(source),
@@ -198,11 +198,11 @@ fn append_limit(command: &mut ProcessCommand, name: &str, value: Option<ByteSize
     }
 }
 
-fn finish_before_error(
+fn finish_after_error(
     lease: zhold_store::ArenaLease,
     format: OutputFormat,
 ) -> Result<(), CliError> {
-    let finalization = lease.finish_not_started()?;
+    let finalization = lease.finish_aborted()?;
     let _ignored = render::history_finalization(&finalization, format);
     Ok(())
 }

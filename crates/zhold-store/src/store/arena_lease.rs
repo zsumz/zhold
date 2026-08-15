@@ -20,10 +20,17 @@ pub struct ArenaLease {
     build_dir: PathBuf,
     initial_bytes: ByteSize,
     started_at: u64,
-    finished: bool,
+    stage: LeaseStage,
     arena_lock: Option<ExclusiveFileLock>,
     worktree: Option<WorktreeAdmission>,
     pending_history: Vec<HistoryDraft>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LeaseStage {
+    Reserved,
+    Spawned,
+    Finalized,
 }
 
 impl ArenaLease {
@@ -45,7 +52,7 @@ impl ArenaLease {
             build_dir,
             initial_bytes,
             started_at,
-            finished: false,
+            stage: LeaseStage::Reserved,
             arena_lock: Some(arena_lock),
             worktree: Some(worktree),
             pending_history: Vec::new(),
@@ -76,6 +83,13 @@ impl ArenaLease {
         measure_tree(&self.arena_root)
     }
 
+    /// Records that Cargo was successfully spawned for this reservation.
+    pub fn mark_spawned(&mut self) {
+        if matches!(self.stage, LeaseStage::Reserved) {
+            self.stage = LeaseStage::Spawned;
+        }
+    }
+
     /// Records the child process outcome and releases the lease.
     pub fn finish(self, outcome: BuildOutcome) -> Result<BuildFinalization, StoreError> {
         self.finish_observed(outcome, ByteSize::ZERO)
@@ -92,15 +106,35 @@ impl ArenaLease {
 
     /// Records an admitted command that failed before Cargo was spawned.
     pub fn finish_not_started(self) -> Result<BuildFinalization, StoreError> {
-        self.finish_observed(BuildOutcome::NotStarted, ByteSize::ZERO)
+        self.finish_aborted()
+    }
+
+    /// Finalizes an abnormal path according to whether Cargo was ever spawned.
+    pub fn finish_aborted(self) -> Result<BuildFinalization, StoreError> {
+        let (outcome, observation) = match self.stage {
+            LeaseStage::Reserved => (BuildOutcome::NotStarted, ByteSize::ZERO),
+            LeaseStage::Spawned => (
+                BuildOutcome::Terminated,
+                self.measure().unwrap_or(self.initial_bytes),
+            ),
+            LeaseStage::Finalized => return Ok(BuildFinalization::default()),
+        };
+        self.finish_observed(outcome, observation)
     }
 
     /// Records the bounded high-water observation used by build history.
     pub(crate) fn finish_observed(
         mut self,
-        outcome: BuildOutcome,
+        mut outcome: BuildOutcome,
         high_water_observation: ByteSize,
     ) -> Result<BuildFinalization, StoreError> {
+        if matches!(self.stage, LeaseStage::Spawned) && matches!(outcome, BuildOutcome::NotStarted)
+        {
+            outcome = BuildOutcome::Terminated;
+        }
+        if !matches!(outcome, BuildOutcome::NotStarted) {
+            self.mark_spawned();
+        }
         ensure_managed_directory(self.store.layout.root(), &self.build_dir)?;
         let final_bytes = self.measure().ok();
         let integration = self
@@ -116,7 +150,7 @@ impl ArenaLease {
             self.started_at,
             integration,
         )?;
-        self.finished = true;
+        self.stage = LeaseStage::Finalized;
         self.release_locks();
         let mut warnings = primary.warnings;
         if !matches!(outcome, BuildOutcome::NotStarted) {
@@ -155,10 +189,15 @@ impl ArenaLease {
 
 impl Drop for ArenaLease {
     fn drop(&mut self) {
-        if self.finished {
+        if matches!(self.stage, LeaseStage::Finalized) {
             return;
         }
-        self.finished = true;
+        let outcome = match self.stage {
+            LeaseStage::Reserved => BuildOutcome::NotStarted,
+            LeaseStage::Spawned => BuildOutcome::Terminated,
+            LeaseStage::Finalized => return,
+        };
+        self.stage = LeaseStage::Finalized;
         if ensure_managed_directory(self.store.layout.root(), &self.build_dir).is_err() {
             self.release_locks();
             return;
@@ -170,7 +209,7 @@ impl Drop for ArenaLease {
             .and_then(|admission| admission.integration.as_ref());
         let build = self.store.finish_primary(
             &self.arena_id,
-            BuildOutcome::Terminated,
+            outcome,
             ByteSize::ZERO,
             self.initial_bytes,
             final_bytes,
@@ -179,7 +218,10 @@ impl Drop for ArenaLease {
         );
         self.release_locks();
         if let Ok(primary) = build {
-            let _warnings = self.learn_reservation(primary.command_class, primary.observed_growth);
+            if !matches!(outcome, BuildOutcome::NotStarted) {
+                let _warnings =
+                    self.learn_reservation(primary.command_class, primary.observed_growth);
+            }
             self.pending_history.push(primary.history);
             for draft in self.pending_history.drain(..) {
                 let _ignored = persist(&self.store, draft);
