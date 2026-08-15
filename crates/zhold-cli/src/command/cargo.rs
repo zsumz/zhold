@@ -17,6 +17,7 @@ use crate::{
 };
 
 const SENTINEL_ENV: &str = "ZHOLD_INTERNAL_CARGO_SENTINEL";
+const DEFAULT_BUILD_RESERVATION: ByteSize = ByteSize::from_bytes(1024 * 1024 * 1024);
 
 #[derive(Debug, Serialize)]
 pub(crate) struct CargoReport {
@@ -24,6 +25,7 @@ pub(crate) struct CargoReport {
     pub(crate) build_dir: PathBuf,
     pub(crate) outcome: BuildOutcome,
     pub(crate) exit_code: i32,
+    pub(crate) reservation: ByteSize,
     pub(crate) peak_size: ByteSize,
     pub(crate) size_limit_exceeded: bool,
 }
@@ -90,7 +92,8 @@ fn execute_managed(
     let invocation =
         CargoInvocation::new("cargo".to_owned(), arguments, working_directory.clone())?;
     let context = ContextResolver::resolve(&invocation)?;
-    let reservation = limits.build_reserve.unwrap_or(ByteSize::ZERO);
+    let minimum_reservation = limits.build_reserve.unwrap_or(DEFAULT_BUILD_RESERVATION);
+    let reservation = store.recommended_reservation(&invocation, minimum_reservation)?;
     let lease = if let Some(budget) = limits.budget {
         let (lease, collection) = store.lease_reserved_and_collect(
             &context,
@@ -121,7 +124,7 @@ fn execute_managed(
         }
     }
     let managed_arguments = invocation.managed_arguments(lease.build_dir())?;
-    render::cargo_start(lease.arena_id(), lease.build_dir(), format)?;
+    render::cargo_start(lease.arena_id(), lease.build_dir(), reservation, format)?;
     let child = ProcessCommand::new(invocation.program())
         .args(managed_arguments)
         .current_dir(invocation.working_directory())
@@ -162,6 +165,7 @@ fn execute_managed(
         build_dir: lease.build_dir().to_path_buf(),
         outcome,
         exit_code,
+        reservation,
         peak_size,
         size_limit_exceeded,
     };

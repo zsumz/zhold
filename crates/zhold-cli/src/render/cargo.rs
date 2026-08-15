@@ -4,7 +4,7 @@ use std::{
 };
 
 use serde::Serialize;
-use zhold_core::{ArenaId, BuildOutcome};
+use zhold_core::{ArenaId, BuildOutcome, ByteSize};
 use zhold_store::BuildFinalization;
 
 use super::output::output_error;
@@ -13,6 +13,7 @@ use crate::{CliError, app::OutputFormat, command::CargoReport, render::json};
 pub(crate) fn cargo_start(
     arena: &ArenaId,
     build_dir: &Path,
+    reservation: ByteSize,
     format: OutputFormat,
 ) -> Result<(), CliError> {
     #[derive(Serialize)]
@@ -20,21 +21,24 @@ pub(crate) fn cargo_start(
         event: &'static str,
         arena_id: &'a ArenaId,
         build_dir: &'a Path,
+        reservation: ByteSize,
     }
     if matches!(format, OutputFormat::Json) {
         return json::write_stderr(&Start {
             event: "cargo_started",
             arena_id: arena,
             build_dir,
+            reservation,
         });
     }
     let stderr = io::stderr();
     let mut output = stderr.lock();
     writeln!(
         output,
-        "zhold  arena {}\n       build {}",
+        "zhold  arena {}\n       build {}\n       reserved {} growth",
         short_id(arena),
-        build_dir.display()
+        build_dir.display(),
+        reservation
     )
     .map_err(output_error)
 }
@@ -48,6 +52,7 @@ pub(crate) fn cargo_finish(report: &CargoReport, format: OutputFormat) -> Result
             build_dir: &'a Path,
             outcome: BuildOutcome,
             exit_code: i32,
+            reservation: ByteSize,
             peak_size: zhold_core::ByteSize,
             size_limit_exceeded: bool,
         }
@@ -57,6 +62,7 @@ pub(crate) fn cargo_finish(report: &CargoReport, format: OutputFormat) -> Result
             build_dir: &report.build_dir,
             outcome: report.outcome,
             exit_code: report.exit_code,
+            reservation: report.reservation,
             peak_size: report.peak_size,
             size_limit_exceeded: report.size_limit_exceeded,
         });

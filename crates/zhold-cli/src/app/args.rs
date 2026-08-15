@@ -19,7 +19,7 @@ pub(crate) struct Cli {
     /// Minimum free bytes required on the store volume before Cargo starts.
     #[arg(long, global = true, env = "ZHOLD_MIN_FREE")]
     pub(crate) min_free: Option<ByteSize>,
-    /// Additional growth headroom reserved by each managed Cargo run.
+    /// Minimum growth headroom; history may raise it conservatively.
     #[arg(long, global = true, env = "ZHOLD_BUILD_RESERVE")]
     pub(crate) build_reserve: Option<ByteSize>,
     /// Best-effort warning threshold for one managed arena during Cargo execution.
