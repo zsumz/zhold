@@ -23,11 +23,12 @@ pub(super) fn resolve(invocation: &CargoInvocation) -> Result<CargoContext, Stor
     let workspace_root = workspace_root(invocation)?;
     let cargo_verbose = cargo_verbose(invocation, &prefix)?;
     let (rustc_program, rustc_verbose) = rustc_verbose(invocation)?;
+    let configuration = super::config_identity::fingerprint(invocation)?;
     Ok(CargoContext {
         workspace_root,
         cargo_version: version,
         toolchain_description: format!(
-            "{cargo_verbose}\n--- rustc: {rustc_program} ---\n{rustc_verbose}"
+            "{cargo_verbose}\n--- rustc: {rustc_program} ---\n{rustc_verbose}\n--- cargo config ---\n{configuration}"
         ),
     })
 }

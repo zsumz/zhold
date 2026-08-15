@@ -117,6 +117,53 @@ impl CargoInvocation {
         Ok(prefix)
     }
 
+    pub(crate) fn effective_working_directory(&self) -> Result<PathBuf, StoreError> {
+        let mut directory = self.working_directory.clone();
+        let mut index = usize::from(self.toolchain_override().is_some());
+        while let Some(argument) = self.arguments.get(index) {
+            match argument.as_str() {
+                "-C" => {
+                    let value = required_value(&self.arguments, index, argument)?;
+                    directory = resolve_directory(&self.working_directory, value);
+                    index = index.saturating_add(2);
+                }
+                "-Z" | "--color" | "--config" => index = index.saturating_add(2),
+                _ if argument.starts_with("-C") && argument.len() > 2 => {
+                    directory = resolve_directory(&self.working_directory, &argument[2..]);
+                    index = index.saturating_add(1);
+                }
+                _ if argument.starts_with('-') => index = index.saturating_add(1),
+                _ => break,
+            }
+        }
+        directory
+            .canonicalize()
+            .map_err(|error| StoreError::io("resolve Cargo working directory", directory, error))
+    }
+
+    pub(crate) fn configuration_overrides(&self) -> Result<Vec<String>, StoreError> {
+        let boundary = self
+            .arguments
+            .iter()
+            .position(|argument| argument == "--")
+            .unwrap_or(self.arguments.len());
+        let mut values = Vec::new();
+        let mut index = 0;
+        while index < boundary {
+            let argument = &self.arguments[index];
+            if argument == "--config" {
+                values.push(required_value(&self.arguments, index, argument)?.clone());
+                index = index.saturating_add(2);
+            } else {
+                if let Some(("--config", value)) = argument.split_once('=') {
+                    values.push(value.to_owned());
+                }
+                index = index.saturating_add(1);
+            }
+        }
+        Ok(values)
+    }
+
     /// Returns Cargo arguments with zhold's owned build directory at final precedence.
     pub fn managed_arguments(&self, build_dir: &Path) -> Result<Vec<String>, StoreError> {
         let build_dir = build_dir.to_str().ok_or_else(|| StoreError::NonUnicode {
@@ -157,4 +204,13 @@ fn joined_prelude(argument: &str) -> bool {
     (argument.starts_with("-C") && argument.len() > 2)
         || (argument.starts_with("-Z") && argument.len() > 2)
         || argument.starts_with("--config=")
+}
+
+fn resolve_directory(base: &Path, value: &str) -> PathBuf {
+    let value = Path::new(value);
+    if value.is_absolute() {
+        value.to_path_buf()
+    } else {
+        base.join(value)
+    }
 }

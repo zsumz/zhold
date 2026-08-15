@@ -2,6 +2,7 @@
 
 mod build_context;
 mod cargo;
+mod config_identity;
 mod git;
 mod invocation;
 mod process;

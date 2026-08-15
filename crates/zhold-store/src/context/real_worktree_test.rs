@@ -56,6 +56,27 @@ fn manifest_path_selects_distinct_workspaces_in_one_worktree()
     Ok(())
 }
 
+#[test]
+fn configured_compiler_participates_in_arena_identity() -> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let root = temporary.path().join("repository");
+    fs::create_dir(&root)?;
+    create_project(&root)?;
+    git(&root, &["init"])?;
+    fs::create_dir(root.join(".cargo"))?;
+    let config = root.join(".cargo/config.toml");
+    fs::write(&config, "[build]\nrustc = 'rustc'\n")?;
+    let first = ContextResolver::resolve(&invocation(&root)?)?;
+
+    let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".to_owned());
+    fs::write(&config, format!("[build]\nrustc = {rustc:?}\n"))?;
+    let second = ContextResolver::resolve(&invocation(&root)?)?;
+
+    assert_ne!(first.toolchain_id, second.toolchain_id);
+    assert_ne!(first.arena_id, second.arena_id);
+    Ok(())
+}
+
 fn create_project(root: &Path) -> Result<(), io::Error> {
     fs::create_dir_all(root.join("src"))?;
     fs::write(

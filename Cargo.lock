@@ -590,6 +590,7 @@ dependencies = [
 name = "zhold-store"
 version = "0.0.1-rc.1"
 dependencies = [
+ "blake3",
  "fs2",
  "libc",
  "serde",

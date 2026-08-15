@@ -14,6 +14,7 @@ keywords = ["cargo", "rust", "worktree", "storage", "build"]
 categories = ["development-tools::build-utils", "filesystem"]
 
 [dependencies]
+blake3.workspace = true
 fs2.workspace = true
 serde.workspace = true
 serde_json.workspace = true
