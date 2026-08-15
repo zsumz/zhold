@@ -169,20 +169,39 @@ fn execute_managed(
         peak_size,
         size_limit_exceeded,
     };
+    finalize_cargo(store, lease, &report, limits.max_arena_size, format)
+}
+
+fn finalize_cargo(
+    store: &Store,
+    lease: zhold_store::ArenaLease,
+    report: &CargoReport,
+    warning_threshold: Option<ByteSize>,
+    format: OutputFormat,
+) -> Result<ExitStatus, CliError> {
     if let Ok(Some(quota)) = store.observe_adopted_quota() {
         let _ignored = render::quota_post_build(&quota, format);
     }
-    let render_result = match lease.finish_observed(
-        outcome,
-        peak_size,
-        limits.max_arena_size,
-        size_limit_exceeded,
-    ) {
-        Ok(finalization) => render::cargo_finish_with_history(&report, &finalization, format),
-        Err(error) => render::cargo_finalization_failed(&report, &error.to_string(), format),
-    };
-    let _ignored_render_error = render_result;
-    Ok(ExitStatus::child(exit_code))
+    let finalization = lease.finish_observed(
+        report.outcome,
+        report.peak_size,
+        warning_threshold,
+        report.size_limit_exceeded,
+    );
+    match finalization {
+        Ok(finalization) => {
+            render::cargo_finish_with_history(report, &finalization, format)?;
+            Ok(ExitStatus::child(report.exit_code))
+        }
+        Err(error) => {
+            render::cargo_finalization_failed(report, &error.to_string(), format)?;
+            if report.exit_code == 0 {
+                Ok(ExitStatus::MANAGEMENT_FAILURE)
+            } else {
+                Ok(ExitStatus::child(report.exit_code))
+            }
+        }
+    }
 }
 
 fn wait_for_cargo(

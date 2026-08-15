@@ -38,7 +38,7 @@ fn cargo_json_events_are_filterable_from_shared_stderr() -> Result<(), Box<dyn s
 }
 
 #[test]
-fn finalization_failure_preserves_the_started_child_status()
+fn finalization_failure_after_cargo_success_is_a_management_error()
 -> Result<(), Box<dyn std::error::Error>> {
     let temporary = tempdir()?;
     let project = temporary.path().join("project");
@@ -52,7 +52,7 @@ fn finalization_failure_preserves_the_started_child_status()
         .current_dir(&project)
         .output()?;
 
-    assert!(output.status.success());
+    assert_eq!(output.status.code(), Some(74));
     let stderr = String::from_utf8(output.stderr)?;
     let events = stderr
         .lines()

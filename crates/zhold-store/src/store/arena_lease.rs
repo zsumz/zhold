@@ -97,7 +97,6 @@ impl ArenaLease {
         warning_threshold: Option<ByteSize>,
         warning_threshold_exceeded: bool,
     ) -> Result<BuildFinalization, StoreError> {
-        self.finished = true;
         let final_bytes = self.measure().unwrap_or(peak);
         let integration = self
             .worktree
@@ -114,6 +113,7 @@ impl ArenaLease {
             warning_threshold_exceeded,
             integration,
         )?;
+        self.finished = true;
         self.release_locks();
         self.pending_history.push(build);
         let history = self

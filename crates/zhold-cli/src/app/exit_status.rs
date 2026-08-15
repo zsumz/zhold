@@ -8,6 +8,9 @@ impl ExitStatus {
     /// Successful zhold command.
     pub const SUCCESS: Self = Self(0);
 
+    /// Cargo succeeded, but zhold could not preserve its lifecycle guarantees.
+    pub const MANAGEMENT_FAILURE: Self = Self(74);
+
     /// Creates a status from a child process exit code.
     pub const fn child(code: i32) -> Self {
         Self(code)
