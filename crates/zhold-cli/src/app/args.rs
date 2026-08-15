@@ -56,7 +56,11 @@ pub(crate) enum Command {
         paths: Vec<PathBuf>,
     },
     /// Show managed arena state.
-    Status,
+    Status {
+        /// Recursively reconcile arenas, trash, and physical store bytes.
+        #[arg(long)]
+        deep: bool,
+    },
     /// Retire cold whole arenas until the store reaches its low watermark.
     Gc {
         /// Maximum desired managed store size. Falls back to `--budget` or `ZHOLD_BUDGET`.

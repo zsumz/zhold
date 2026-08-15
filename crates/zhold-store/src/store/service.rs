@@ -220,7 +220,12 @@ impl Store {
 
     /// Reads all valid managed arenas without mutating them.
     pub fn inventory(&self) -> Result<Inventory, StoreError> {
-        read_inventory(self)
+        read_inventory(self, ArenaMeasurement::Deep)
+    }
+
+    /// Reads a metadata-only inventory without traversing arena or trash trees.
+    pub fn inventory_cached(&self) -> Result<Inventory, StoreError> {
+        read_inventory(self, ArenaMeasurement::Cached)
     }
 
     /// Scans managed arenas and read-only foreign Cargo target directories.

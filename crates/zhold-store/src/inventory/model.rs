@@ -7,9 +7,21 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use zhold_core::{ArenaRecord, ByteSize, CommandDescriptor, WorktreeIntegrationState};
 
+/// Cost and freshness class used to produce an inventory.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum InventoryDepth {
+    /// Metadata, cached arena sizes, leases, and retirement journals only.
+    Cached,
+    /// Recursive filesystem reconciliation of arenas, trash, and store footprint.
+    Deep,
+}
+
 /// Snapshot of all valid managed arenas in one store.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Inventory {
+    /// Cost and freshness class used for this snapshot.
+    pub depth: InventoryDepth,
     /// Stable store identity.
     pub store_id: Uuid,
     /// Canonical store root.
@@ -26,8 +38,10 @@ pub struct Inventory {
     pub uncertain_owned: u64,
     /// Measured bytes in retired arenas awaiting deletion.
     pub trash: ByteSize,
+    /// Confidence in the pending-trash byte count.
+    pub trash_quality: zhold_core::SizeQuality,
     /// Measured bytes beneath the complete marked store root.
-    pub physical: ByteSize,
+    pub physical: Option<ByteSize>,
     /// Bytes currently available to the store filesystem user.
     pub available: ByteSize,
     /// Bounded persistent operation-history health.

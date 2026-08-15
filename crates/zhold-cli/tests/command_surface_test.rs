@@ -119,9 +119,28 @@ fn status_json_is_one_parseable_document() -> Result<(), Box<dyn std::error::Err
     let document: serde_json::Value = serde_json::from_slice(&output.stdout)?;
     assert_eq!(document["arenas"], serde_json::json!([]));
     assert!(document["store_root"].is_string());
-    assert!(document["physical"].is_number());
+    assert_eq!(document["depth"], "cached");
+    assert!(document["physical"].is_null());
     assert!(document["available"].is_number());
     assert_eq!(document["reserved"], 0);
+    Ok(())
+}
+
+#[test]
+fn deep_status_reconciles_the_physical_footprint() -> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let store = temporary.path().join("store");
+
+    let output = zhold(
+        &store,
+        temporary.path(),
+        &["--format", "json", "status", "--deep"],
+    )?;
+
+    assert!(output.status.success());
+    let document: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(document["depth"], "deep");
+    assert!(document["physical"].is_number());
     Ok(())
 }
 

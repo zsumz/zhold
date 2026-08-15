@@ -6,7 +6,7 @@ use crate::{
 };
 
 pub(crate) fn execute(cli: Cli) -> Result<ExitStatus, CliError> {
-    let command = cli.command.unwrap_or(Command::Status);
+    let command = cli.command.unwrap_or(Command::Status { deep: false });
     let root = match cli.store {
         Some(path) => path,
         None => Store::default_root()?,
@@ -52,7 +52,7 @@ pub(crate) fn execute(cli: Cli) -> Result<ExitStatus, CliError> {
             cli.format,
         ),
         Command::Scan { paths } => super::scan::execute(&store, paths, cli.format),
-        Command::Status => super::status::execute(&store, cli.format),
+        Command::Status { deep } => super::status::execute(&store, deep, cli.format),
         Command::Gc {
             size: _,
             low_watermark,

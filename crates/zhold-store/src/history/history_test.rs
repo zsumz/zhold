@@ -28,8 +28,10 @@ fn completed_build_publishes_a_private_high_water_receipt() -> Result<(), Box<dy
     )?;
 
     let lease = store.lease_reserved(&context, &invocation, ByteSize::from_bytes(400))?;
+    let initial = lease.measure()?;
     fs::write(lease.build_dir().join("artifact"), vec![1_u8; 200])?;
-    let finalization = lease.finish_observed(BuildOutcome::Succeeded, ByteSize::from_bytes(300))?;
+    let high_water = initial.saturating_add(ByteSize::from_bytes(300));
+    let finalization = lease.finish_observed(BuildOutcome::Succeeded, high_water)?;
 
     assert_eq!(finalization.history.len(), 1);
     assert!(finalization.history[0].warnings.is_empty());
@@ -38,7 +40,10 @@ fn completed_build_publishes_a_private_high_water_receipt() -> Result<(), Box<dy
     let HistoryPayload::Build(build) = &report.receipts[0].payload else {
         return Err("expected build receipt".into());
     };
-    assert_eq!(build.high_water_observation, ByteSize::from_bytes(300));
+    assert_eq!(
+        build.high_water_observation,
+        high_water.max(build.final_bytes)
+    );
     assert_eq!(build.reservation, ByteSize::from_bytes(400));
     assert_eq!(build.command_class, CargoCommandClass::Check);
     let encoded = serde_json::to_string(&report)?;

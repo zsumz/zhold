@@ -20,10 +20,13 @@ fn dry_run_and_retry_delete_only_owned_retirement_entries() -> Result<(), Box<dy
     let store = Store::open(store_root.path())?;
     let (context, _) = create_idle_arena(&store, project.path(), 4_096)?;
     let retired = retire_for_test(&store, &context)?;
+    let cached = store.inventory_cached()?;
 
     let preview = store.retry_trash(true)?;
     assert!(retired.is_dir());
     assert!(preview.before > zhold_core::ByteSize::ZERO);
+    assert!(cached.trash > zhold_core::ByteSize::ZERO);
+    assert_eq!(cached.trash_quality, zhold_core::SizeQuality::Cached);
     assert_eq!(preview.entries.len(), 1);
     assert!(matches!(
         preview.entries[0].outcome,
@@ -156,6 +159,7 @@ fn retire_for_test(
         context.arena_id().clone(),
         retirement_id,
         manifest.revision,
+        crate::io::measure_tree(&arena)?,
     );
     assert!(create_json(&record_path, &record)?);
     fs::rename(arena, &retired)?;

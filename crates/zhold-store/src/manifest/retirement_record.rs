@@ -2,11 +2,11 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use zhold_core::ArenaId;
+use zhold_core::{ArenaId, ByteSize};
 
 use crate::{Store, StoreError};
 
-const RETIREMENT_SCHEMA_VERSION: u32 = 1;
+const RETIREMENT_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(crate) struct RetirementRecord {
@@ -17,6 +17,8 @@ pub(crate) struct RetirementRecord {
     original_path: PathBuf,
     trash_path: PathBuf,
     retired_revision: u64,
+    #[serde(default)]
+    retired_size: ByteSize,
 }
 
 impl RetirementRecord {
@@ -25,6 +27,7 @@ impl RetirementRecord {
         arena_id: ArenaId,
         retirement_id: Uuid,
         retired_revision: u64,
+        retired_size: ByteSize,
     ) -> Self {
         Self {
             schema_version: RETIREMENT_SCHEMA_VERSION,
@@ -34,6 +37,7 @@ impl RetirementRecord {
             arena_id,
             retirement_id,
             retired_revision,
+            retired_size,
         }
     }
 
@@ -43,7 +47,7 @@ impl RetirementRecord {
         arena_id: &ArenaId,
         retirement_id: Uuid,
     ) -> Result<(), StoreError> {
-        let valid = self.schema_version == RETIREMENT_SCHEMA_VERSION
+        let valid = (1..=RETIREMENT_SCHEMA_VERSION).contains(&self.schema_version)
             && self.store_id == store.marker.store_id
             && &self.arena_id == arena_id
             && self.retirement_id == retirement_id
@@ -59,5 +63,29 @@ impl RetirementRecord {
                     .to_owned(),
             })
         }
+    }
+
+    pub(crate) fn validate_journal(
+        &self,
+        store: &Store,
+        record_path: &std::path::Path,
+    ) -> Result<(), StoreError> {
+        self.validate(store, &self.arena_id, self.retirement_id)?;
+        if record_path == store.layout.retirement_record(self.retirement_id) {
+            Ok(())
+        } else {
+            Err(StoreError::InvalidOwnership {
+                path: record_path.to_path_buf(),
+                reason: "retirement journal path does not match its nonce".to_owned(),
+            })
+        }
+    }
+
+    pub(crate) const fn retired_size(&self) -> ByteSize {
+        self.retired_size
+    }
+
+    pub(crate) fn trash_path(&self) -> &std::path::Path {
+        &self.trash_path
     }
 }

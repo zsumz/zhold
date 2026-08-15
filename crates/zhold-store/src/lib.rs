@@ -35,7 +35,7 @@ pub use history::{
     HistoryReport, HistorySummary, HistoryWarning, HistoryWarningEvent, HistoryWrite, HookReceipt,
     QuotaReceipt, QuotaReceiptAction,
 };
-pub use inventory::{Inventory, InventoryEntry, InventoryFinding};
+pub use inventory::{Inventory, InventoryDepth, InventoryEntry, InventoryFinding};
 pub use quota::{
     QuotaAction, QuotaAdoption, QuotaExpectation, QuotaObservation, QuotaPlan, QuotaStatus,
 };

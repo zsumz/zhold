@@ -83,13 +83,18 @@ impl DoctorReport {
             findings.push("adopted quota enforcement is drifted or unverifiable".to_owned());
         }
         let finding_count = findings.len();
+        let physical_bytes = inventory.physical.ok_or_else(|| {
+            StoreError::InvalidConfiguration(
+                "deep doctor inventory omitted the physical footprint".to_owned(),
+            )
+        })?;
         Ok(Self {
             store_id: store.marker.store_id,
             arena_count: inventory.arenas.len(),
             finding_count,
             trash_count,
             trash_bytes: inventory.trash,
-            physical_bytes: inventory.physical,
+            physical_bytes,
             available_bytes: inventory.available,
             history_count: inventory.history.receipt_count,
             history_bytes: inventory.history.receipt_bytes,

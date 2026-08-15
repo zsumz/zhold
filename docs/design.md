@@ -51,9 +51,10 @@ If a build is unfinished after its sentinel lease disappears, the arena becomes
 suspect. Its size and reservation remain protected, collection refuses to
 retire it, and reuse requires an explicit recovery decision.
 
-Retirement first renames an owned arena into owned trash. Recursive removal is
-attempted only after that namespace transition. Failed physical deletion leaves
-pending trash that can be retried without returning the arena to the live index.
+Retirement first writes an external authority journal, then renames an owned
+arena into owned trash. Recursive removal is attempted only after that namespace
+transition, and the journal is deleted last. Failed physical deletion therefore
+retains retry proof even if arena contents were already removed.
 
 ## Accounting
 
@@ -61,9 +62,11 @@ Routine Cargo admission uses manifests, leases, cached completed sizes, and live
 reservations. It does not recursively walk arena trees. A missing durable size,
 invalid owned metadata, or an unrecoverable active reservation blocks admission.
 
-Explicit status, doctor, and manual collection perform deep measurement. The
-inventory distinguishes fresh, cached, stale, and unknown size quality. Stale
-and unknown owned state is protected and makes the budget unsatisfied.
+Bare status uses cached sizes and retirement journals without descending into
+build trees. `zhold status --deep`, doctor, and manual collection perform deep
+measurement. The inventory distinguishes fresh, cached, stale, and unknown
+size quality. Stale and unknown owned state is protected and makes the budget
+unsatisfied.
 
 The user-facing vocabulary is deliberately separate:
 

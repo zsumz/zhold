@@ -201,6 +201,7 @@ pub(super) fn retire(
         eviction.arena_id.clone(),
         retirement_id,
         manifest.revision,
+        measured,
     );
     if !create_json(&record_path, &record)? {
         return Err(StoreError::InvalidOwnership {

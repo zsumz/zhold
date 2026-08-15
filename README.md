@@ -30,9 +30,10 @@ zhold gc --dry-run
 zhold gc
 ```
 
-`zhold` by itself shows the store, arena, reservation, pending-trash, history,
-and filesystem state. A one-off collection budget remains available as
-`zhold gc 100GiB --dry-run`.
+`zhold` by itself reads cached arena sizes, leases, reservations, and retirement
+journals without walking build trees. Use `zhold status --deep` or `zhold
+doctor` for recursive physical reconciliation. A one-off collection budget
+remains available as `zhold gc 100GiB --dry-run`.
 
 Useful core commands:
 

@@ -24,7 +24,7 @@ pub(crate) fn inventory(inventory: &Inventory, format: OutputFormat) -> Result<(
     )
     .map_err(output_error)?;
     writeln!(output, "trash      {}", inventory.trash).map_err(output_error)?;
-    writeln!(output, "physical   {}", inventory.physical).map_err(output_error)?;
+    write_physical(&mut output, inventory.physical)?;
     writeln!(output, "available  {}", inventory.available).map_err(output_error)?;
     writeln!(
         output,
@@ -108,6 +108,20 @@ pub(crate) fn inventory(inventory: &Inventory, format: OutputFormat) -> Result<(
         .map_err(output_error)?;
     }
     Ok(())
+}
+
+fn write_physical(
+    output: &mut impl Write,
+    physical: Option<zhold_core::ByteSize>,
+) -> Result<(), CliError> {
+    match physical {
+        Some(physical) => writeln!(output, "physical   {physical}"),
+        None => writeln!(
+            output,
+            "physical   not measured (use `zhold status --deep`)"
+        ),
+    }
+    .map_err(output_error)
 }
 
 fn state_name(state: ArenaState) -> &'static str {

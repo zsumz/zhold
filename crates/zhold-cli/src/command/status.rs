@@ -6,8 +6,16 @@ use crate::{
     render,
 };
 
-pub(super) fn execute(store: &Store, format: OutputFormat) -> Result<ExitStatus, CliError> {
-    let inventory = store.inventory()?;
+pub(super) fn execute(
+    store: &Store,
+    deep: bool,
+    format: OutputFormat,
+) -> Result<ExitStatus, CliError> {
+    let inventory = if deep {
+        store.inventory()?
+    } else {
+        store.inventory_cached()?
+    };
     render::inventory(&inventory, format)?;
     Ok(ExitStatus::SUCCESS)
 }

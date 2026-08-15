@@ -9,6 +9,28 @@ use crate::{
 };
 use tempfile::tempdir;
 
+#[cfg(unix)]
+#[test]
+fn cached_inventory_does_not_descend_into_build_trees() -> Result<(), Box<dyn std::error::Error>> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let store_root = tempdir()?;
+    let project = tempdir()?;
+    let store = Store::open(store_root.path())?;
+    let (context, _) = create_idle_arena(&store, project.path(), 4_096)?;
+    let blocked = store.layout.build_dir(context.arena_id()).join("blocked");
+    fs::create_dir(&blocked)?;
+    fs::set_permissions(&blocked, fs::Permissions::from_mode(0o000))?;
+
+    let inventory = store.inventory_cached();
+
+    fs::set_permissions(&blocked, fs::Permissions::from_mode(0o700))?;
+    let inventory = inventory?;
+    assert_eq!(inventory.depth, super::InventoryDepth::Cached);
+    assert!(inventory.physical.is_none());
+    Ok(())
+}
+
 #[test]
 fn reports_unexpected_arena_prefixes() -> Result<(), Box<dyn std::error::Error>> {
     let store_root = tempdir()?;
