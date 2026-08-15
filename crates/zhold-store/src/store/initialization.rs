@@ -7,7 +7,9 @@ use uuid::Uuid;
 
 use crate::{
     StoreError,
-    io::{configure_private_file, create_json, read_json, secure_directory, write_json},
+    io::{
+        configure_private_file, create_json, read_json, secure_directory, secure_file, write_json,
+    },
     layout::StoreLayout,
     lock::ExclusiveFileLock,
     manifest::StoreMarker,
@@ -23,6 +25,7 @@ pub(super) fn open_marker_read_write(layout: &StoreLayout) -> Result<StoreMarker
                     reason: "store marker is not a real file".to_owned(),
                 });
             }
+            secure_file(&marker_path)?;
             let marker: StoreMarker = read_json(&marker_path)?;
             let marker = if marker.schema_version == 1 {
                 let _initialization = ExclusiveFileLock::acquire(&layout.initialization_lock())?;
