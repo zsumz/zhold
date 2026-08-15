@@ -8,6 +8,8 @@ mod initialization;
 mod service;
 
 #[cfg(test)]
+mod accounting_test;
+#[cfg(test)]
 mod service_test;
 #[cfg(test)]
 mod store_test;
