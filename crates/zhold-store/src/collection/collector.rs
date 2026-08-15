@@ -30,8 +30,13 @@ pub(crate) fn collect_locked(
 ) -> Result<CollectionReport, StoreError> {
     let inventory = read_arena_snapshot(store, measurement)?;
     if inventory.uncertain_owned > 0 {
+        let reason = inventory.findings.first().map_or_else(
+            || "no detailed finding was recorded".to_owned(),
+            finding_reason,
+        );
         return Err(StoreError::InventoryUncertain {
             count: inventory.uncertain_owned,
+            reason,
         });
     }
     let records = inventory
@@ -105,6 +110,10 @@ pub(crate) fn collect_locked(
         skipped,
         history: crate::HistoryWrite::default(),
     })
+}
+
+fn finding_reason(finding: &crate::InventoryFinding) -> String {
+    format!("`{}`: {}", finding.path.display(), finding.reason)
 }
 
 pub(super) fn budget_is_confirmed(

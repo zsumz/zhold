@@ -123,7 +123,7 @@ fn unreadable_owned_metadata_blocks_collection() -> Result<(), Box<dyn std::erro
     assert_eq!(inventory.arenas.len(), 0);
     assert!(matches!(
         store.collect(CollectionPolicy::new(ByteSize::from_bytes(1)), false),
-        Err(StoreError::InventoryUncertain { count: 1 })
+        Err(StoreError::InventoryUncertain { count: 1, .. })
     ));
     Ok(())
 }
@@ -148,7 +148,7 @@ fn every_unparseable_object_under_the_arena_root_counts_as_uncertainty()
     assert_eq!(inventory.uncertain_owned, 4);
     assert!(matches!(
         store.collect(CollectionPolicy::new(ByteSize::from_bytes(1)), false),
-        Err(StoreError::InventoryUncertain { count: 4 })
+        Err(StoreError::InventoryUncertain { count: 4, .. })
     ));
     Ok(())
 }

@@ -126,10 +126,14 @@ pub enum StoreError {
     #[error("quota admission is blocked: {0}")]
     QuotaAdmissionBlocked(String),
     /// Plausibly owned bytes could not be accounted conservatively.
-    #[error("admission is blocked because {count} owned arena entries have uncertain accounting")]
+    #[error(
+        "admission is blocked because {count} owned arena entries have uncertain accounting; first finding: {reason}"
+    )]
     InventoryUncertain {
         /// Number of plausible owned entries requiring attention.
         count: u64,
+        /// First concrete inventory finding for actionable diagnosis.
+        reason: String,
     },
     /// The bounded reservation estimate is corrupt or belongs to another store.
     #[error("reservation profile is invalid or belongs to another store")]
