@@ -35,3 +35,28 @@ fn zero_arena_budget_is_rejected() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(store.config()?, StoreConfig::default());
     Ok(())
 }
+
+#[test]
+fn config_patch_preserves_unspecified_values() -> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let store = Store::open(temporary.path().join("store"))?;
+    store.set_config(StoreConfig {
+        arena_budget: Some(ByteSize::from_bytes(200)),
+        min_filesystem_free: Some(ByteSize::from_bytes(25)),
+        minimum_build_reservation: Some(ByteSize::from_bytes(10)),
+    })?;
+
+    let merged = store.patch_config(StoreConfig {
+        arena_budget: Some(ByteSize::from_bytes(300)),
+        ..StoreConfig::default()
+    })?;
+
+    assert_eq!(merged.arena_budget, Some(ByteSize::from_bytes(300)));
+    assert_eq!(merged.min_filesystem_free, Some(ByteSize::from_bytes(25)));
+    assert_eq!(
+        merged.minimum_build_reservation,
+        Some(ByteSize::from_bytes(10))
+    );
+    assert_eq!(store.config()?, merged);
+    Ok(())
+}

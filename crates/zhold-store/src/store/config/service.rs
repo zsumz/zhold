@@ -32,19 +32,39 @@ impl Store {
     pub fn set_config(&self, config: StoreConfig) -> Result<(), StoreError> {
         validate_config(config)?;
         let _lock = ExclusiveFileLock::acquire(&self.layout.config_lock())?;
-        let document = ConfigDocument {
-            schema_version: SCHEMA_VERSION,
-            store_id: self.marker.store_id,
-            config,
+        persist_config(self, config)
+    }
+
+    /// Patches only explicitly supplied durable defaults and preserves all others.
+    pub fn patch_config(&self, patch: StoreConfig) -> Result<StoreConfig, StoreError> {
+        let _lock = ExclusiveFileLock::acquire(&self.layout.config_lock())?;
+        let current = read_config(self)?;
+        let merged = StoreConfig {
+            arena_budget: patch.arena_budget.or(current.arena_budget),
+            min_filesystem_free: patch.min_filesystem_free.or(current.min_filesystem_free),
+            minimum_build_reservation: patch
+                .minimum_build_reservation
+                .or(current.minimum_build_reservation),
         };
-        let path = self.layout.config();
-        if path.exists() {
-            write_json(&path, &document)
-        } else if create_json(&path, &document)? {
-            Ok(())
-        } else {
-            write_json(&path, &document)
-        }
+        validate_config(merged)?;
+        persist_config(self, merged)?;
+        Ok(merged)
+    }
+}
+
+fn persist_config(store: &Store, config: StoreConfig) -> Result<(), StoreError> {
+    let document = ConfigDocument {
+        schema_version: SCHEMA_VERSION,
+        store_id: store.marker.store_id,
+        config,
+    };
+    let path = store.layout.config();
+    if path.exists() {
+        write_json(&path, &document)
+    } else if create_json(&path, &document)? {
+        Ok(())
+    } else {
+        write_json(&path, &document)
     }
 }
 
