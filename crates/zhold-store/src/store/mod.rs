@@ -1,6 +1,7 @@
 //! Marked store capability and leased arena lifecycle.
 
 mod arena_lease;
+mod collection;
 mod doctor;
 mod finalization;
 mod history;

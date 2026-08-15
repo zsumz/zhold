@@ -5,7 +5,7 @@ use zhold_core::{
     BuildOutcome, ByteSize, CargoCommandClass, CollectionPolicy, HistoryKind, HistoryPolicy,
 };
 
-use super::{HistoryPayload, HistoryPruneRequest, HistoryQuery};
+use super::{CollectionReceiptSource, HistoryPayload, HistoryPruneRequest, HistoryQuery};
 use crate::{CargoInvocation, Store, io::read_json, manifest::ArenaManifest, test_support};
 
 #[test]
@@ -67,6 +67,29 @@ fn collection_and_filters_are_newest_first() -> Result<(), Box<dyn std::error::E
         HistoryPayload::Collection(_)
     ));
     assert!(!history.more);
+    Ok(())
+}
+
+#[test]
+fn post_build_collection_records_its_lifecycle_source()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let store = Store::open(temporary.path().join("store"))?;
+
+    let report = store.collect_post_build(CollectionPolicy::new(ByteSize::from_bytes(1)))?;
+    assert!(report.history.receipt_id.is_some());
+    let history = store.history(&HistoryQuery {
+        kind: Some(HistoryKind::Collection),
+        limit: 1,
+        ..HistoryQuery::default()
+    })?;
+    let Some(receipt) = history.receipts.first() else {
+        return Err("missing collection receipt".into());
+    };
+    let HistoryPayload::Collection(collection) = &receipt.payload else {
+        return Err("expected collection receipt".into());
+    };
+    assert_eq!(collection.source, CollectionReceiptSource::PostBuild);
     Ok(())
 }
 

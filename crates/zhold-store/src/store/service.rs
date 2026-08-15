@@ -11,9 +11,9 @@ use zhold_core::{ArenaId, ByteSize, CollectionPolicy};
 
 use crate::{
     ArenaLease, BuildContext, CargoInvocation, CollectionReport, DoctorReport, Inventory,
-    ScanReport, StoreError, TrashReport,
-    collection::{collect, collect_locked, retry_trash},
-    history::{CollectionReceiptSource, HistoryDraft, persist},
+    ScanReport, StoreError,
+    collection::collect_locked,
+    history::{CollectionReceiptSource, HistoryDraft},
     inventory::read_inventory,
     io::{create_json, read_json, write_json},
     layout::StoreLayout,
@@ -220,31 +220,6 @@ impl Store {
     /// Scans managed arenas and read-only foreign Cargo target directories.
     pub fn scan(&self, roots: &[PathBuf]) -> Result<ScanReport, StoreError> {
         scan(self, roots)
-    }
-
-    /// Plans or executes deterministic whole-arena collection.
-    pub fn collect(
-        &self,
-        policy: CollectionPolicy,
-        dry_run: bool,
-    ) -> Result<CollectionReport, StoreError> {
-        let mut report = collect(self, policy, dry_run)?;
-        if !dry_run {
-            report.history = persist(
-                self,
-                HistoryDraft::collection(&report, CollectionReceiptSource::Manual),
-            );
-        }
-        Ok(report)
-    }
-
-    /// Retries deletion of already-retired, validated owned trash entries.
-    pub fn retry_trash(&self, dry_run: bool) -> Result<TrashReport, StoreError> {
-        let mut report = retry_trash(self, dry_run)?;
-        if !dry_run {
-            report.history = persist(self, HistoryDraft::trash(&report));
-        }
-        Ok(report)
     }
 
     /// Pins or unpins a managed arena.

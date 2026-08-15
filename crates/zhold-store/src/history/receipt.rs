@@ -48,6 +48,8 @@ pub enum CollectionReceiptSource {
     Manual,
     /// Budget preflight collection before a managed build.
     Preflight,
+    /// Steady-state collection after a managed build releases its lease.
+    PostBuild,
     /// Explicit retry of already-retired owned trash.
     TrashRetry,
 }
