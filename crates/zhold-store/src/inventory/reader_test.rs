@@ -148,3 +148,25 @@ fn distinguishes_cached_admission_sizes_from_deep_measurements()
     assert!(cached.total > zhold_core::ByteSize::ZERO);
     Ok(())
 }
+
+#[test]
+fn a_known_zero_size_is_not_owned_uncertainty() -> Result<(), Box<dyn std::error::Error>> {
+    let store_root = tempdir()?;
+    let project = tempdir()?;
+    let store = Store::open(store_root.path())?;
+    let (context, _) = create_idle_arena(&store, project.path(), 4_096)?;
+    let manifest_path = store.layout.manifest(context.arena_id());
+    let mut manifest: ArenaManifest = read_json(&manifest_path)?;
+    manifest.observe_size(zhold_core::ByteSize::ZERO);
+    write_json(&manifest_path, &manifest)?;
+
+    let cached = read_arena_snapshot(&store, ArenaMeasurement::Cached)?;
+
+    assert_eq!(cached.uncertain_owned, 0);
+    assert_eq!(cached.total, zhold_core::ByteSize::ZERO);
+    assert_eq!(
+        cached.arenas[0].record.size_quality,
+        zhold_core::SizeQuality::Cached
+    );
+    Ok(())
+}

@@ -104,7 +104,7 @@ fn absent_final_measurement_preserves_the_durable_size() -> Result<(), Box<dyn s
 
     manifest.finish(
         BuildOutcome::Terminated,
-        durable,
+        durable.unwrap_or_default(),
         None,
         manifest.last_used_at.saturating_add(1),
     );

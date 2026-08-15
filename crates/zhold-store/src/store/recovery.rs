@@ -32,10 +32,11 @@ impl Store {
             return Err(StoreError::ArenaNotSuspect(id.to_string()));
         }
         let measured = measure_tree(&arena).ok();
+        let last_known = manifest.last_known_size.unwrap_or_default();
         let high_water = measured
-            .unwrap_or(manifest.last_known_size)
+            .unwrap_or(last_known)
             .max(manifest.last_observed_size)
-            .max(manifest.last_known_size);
+            .max(last_known);
         manifest.finish(
             BuildOutcome::Terminated,
             high_water,

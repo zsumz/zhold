@@ -37,10 +37,11 @@ and a private command-fingerprint key. The key scopes sanitized invocation
 fingerprints to one store and is never exposed through status output. zhold
 refuses to claim a non-empty unmarked root.
 
-Arena manifests currently write schema version 5 and read versions 1 through 5
+Arena manifests currently write schema version 6 and read versions 1 through 6
 with conservative defaults. Their arena ID must rederive from repository,
 physical worktree, workspace, and toolchain identities. Revisions are monotonic
-and are used for post-plan revalidation.
+and are used for post-plan revalidation. Durable sizes distinguish an explicit
+zero-byte observation from a missing observation.
 
 Retirement journals live outside the subtree being deleted and retain the
 measured retired size, arena identity, nonce, revision, and exact paths. Cached

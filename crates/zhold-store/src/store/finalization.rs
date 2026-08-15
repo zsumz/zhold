@@ -35,7 +35,9 @@ impl Store {
         let finished_at = unix_milliseconds()?;
         let reservation = manifest.reservation;
         let command_class = manifest.command.command_class;
-        let final_bytes = final_bytes.unwrap_or(manifest.last_known_size);
+        let final_bytes = final_bytes
+            .or(manifest.last_known_size)
+            .unwrap_or(ByteSize::ZERO);
         let high_water_observation = high_water_observation.max(initial_bytes).max(final_bytes);
         manifest.finish(
             outcome,

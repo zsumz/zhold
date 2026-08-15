@@ -247,36 +247,37 @@ fn observed_size(
     measurement: ArenaMeasurement,
 ) -> (ByteSize, SizeQuality, Option<InventoryFinding>) {
     if measurement == ArenaMeasurement::Cached {
-        return if manifest.last_known_size > ByteSize::ZERO {
-            (manifest.last_known_size, SizeQuality::Cached, None)
-        } else {
-            (
+        return match manifest.last_known_size {
+            Some(size) => (size, SizeQuality::Cached, None),
+            None => (
                 ByteSize::ZERO,
                 SizeQuality::Unknown,
                 Some(InventoryFinding {
                     path: arena_path.to_path_buf(),
                     reason: "arena has no durable size observation".to_owned(),
                 }),
-            )
+            ),
         };
     }
     match measure_tree(arena_path) {
         Ok(size) => (size, SizeQuality::Fresh, None),
-        Err(error) if manifest.last_known_size > ByteSize::ZERO => (
-            manifest.last_known_size,
-            SizeQuality::Stale,
-            Some(InventoryFinding {
-                path: arena_path.to_path_buf(),
-                reason: format!("current measurement failed; using last known size: {error}"),
-            }),
-        ),
-        Err(error) => (
-            ByteSize::ZERO,
-            SizeQuality::Unknown,
-            Some(InventoryFinding {
-                path: arena_path.to_path_buf(),
-                reason: format!("current measurement failed with no known size: {error}"),
-            }),
-        ),
+        Err(error) => match manifest.last_known_size {
+            Some(size) => (
+                size,
+                SizeQuality::Stale,
+                Some(InventoryFinding {
+                    path: arena_path.to_path_buf(),
+                    reason: format!("current measurement failed; using last known size: {error}"),
+                }),
+            ),
+            None => (
+                ByteSize::ZERO,
+                SizeQuality::Unknown,
+                Some(InventoryFinding {
+                    path: arena_path.to_path_buf(),
+                    reason: format!("current measurement failed with no known size: {error}"),
+                }),
+            ),
+        },
     }
 }

@@ -9,7 +9,7 @@ use zhold_core::{
 
 use crate::{BuildContext, StoreError};
 
-pub(crate) const ARENA_SCHEMA_VERSION: u32 = 5;
+pub(crate) const ARENA_SCHEMA_VERSION: u32 = 6;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(crate) struct ArenaManifest {
@@ -43,7 +43,7 @@ pub(crate) struct ArenaManifest {
     #[serde(default, alias = "last_peak")]
     pub(crate) last_observed_size: ByteSize,
     #[serde(default)]
-    pub(crate) last_known_size: ByteSize,
+    pub(crate) last_known_size: Option<ByteSize>,
     #[serde(default)]
     pub(crate) retirement_id: Option<Uuid>,
 }
@@ -76,7 +76,7 @@ impl ArenaManifest {
             pin_expires_at: None,
             reservation: ByteSize::ZERO,
             last_observed_size: ByteSize::ZERO,
-            last_known_size: ByteSize::ZERO,
+            last_known_size: None,
             retirement_id: None,
         }
     }
@@ -191,13 +191,13 @@ impl ArenaManifest {
         self.reservation = ByteSize::ZERO;
         self.last_observed_size = high_water_observation;
         if let Some(final_bytes) = final_bytes {
-            self.last_known_size = final_bytes;
+            self.last_known_size = Some(final_bytes);
         }
     }
 
     pub(crate) fn observe_size(&mut self, size: ByteSize) {
         self.schema_version = ARENA_SCHEMA_VERSION;
-        self.last_known_size = size;
+        self.last_known_size = Some(size);
     }
 
     pub(crate) fn set_pin(&mut self, pinned: bool, expires_at: Option<u64>) {
