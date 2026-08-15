@@ -202,7 +202,7 @@ fn read_entry(
         branch: manifest.branch,
         head: manifest.head,
         cargo_version: manifest.cargo_version,
-        last_command: manifest.last_command,
+        command: manifest.command,
         reservation: if active {
             manifest.reservation
         } else {

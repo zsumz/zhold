@@ -156,7 +156,7 @@ impl Store {
         ensure_managed_directory(self.layout.root(), &build_dir)?;
         let _metadata_lock = ExclusiveFileLock::acquire(&self.layout.metadata_lock(id))?;
         let manifest_path = self.layout.manifest(id);
-        let command = invocation.rendered_command();
+        let command = invocation.descriptor();
         let now = unix_seconds()?;
         let mut manifest = if created {
             ArenaManifest::create(self.marker.store_id, context, now)

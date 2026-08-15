@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use zhold_core::CommandDescriptor;
+
 use crate::StoreError;
 
 /// One Cargo command to run from a working directory.
@@ -64,9 +66,7 @@ impl CargoInvocation {
             .collect()
     }
 
-    pub(crate) fn rendered_command(&self) -> Vec<String> {
-        std::iter::once(self.program.clone())
-            .chain(self.arguments.iter().cloned())
-            .collect()
+    pub(crate) fn descriptor(&self) -> CommandDescriptor {
+        CommandDescriptor::from_arguments(&self.arguments)
     }
 }

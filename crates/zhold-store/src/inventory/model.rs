@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use crate::{HistorySummary, QuotaStatus, WorktreeSummary};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use zhold_core::{ArenaRecord, ByteSize, WorktreeIntegrationState};
+use zhold_core::{ArenaRecord, ByteSize, CommandDescriptor, WorktreeIntegrationState};
 
 /// Snapshot of all valid managed arenas in one store.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -56,8 +56,8 @@ pub struct InventoryEntry {
     pub head: Option<String>,
     /// Selected Cargo release.
     pub cargo_version: String,
-    /// Most recently wrapped command.
-    pub last_command: Vec<String>,
+    /// Sanitized descriptor of the most recently wrapped command.
+    pub command: CommandDescriptor,
     /// Additional growth headroom declared by this lease when active.
     pub reservation: ByteSize,
     /// Largest observed arena size during the most recently completed run.

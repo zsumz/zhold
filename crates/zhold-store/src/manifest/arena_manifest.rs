@@ -3,12 +3,13 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use zhold_core::{
-    ArenaId, BuildOutcome, ByteSize, RepositoryId, ToolchainId, WorkspaceId, WorktreeId,
+    ArenaId, BuildOutcome, ByteSize, CommandDescriptor, RepositoryId, ToolchainId, WorkspaceId,
+    WorktreeId,
 };
 
 use crate::{BuildContext, StoreError};
 
-pub(crate) const ARENA_SCHEMA_VERSION: u32 = 2;
+pub(crate) const ARENA_SCHEMA_VERSION: u32 = 3;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(crate) struct ArenaManifest {
@@ -31,6 +32,9 @@ pub(crate) struct ArenaManifest {
     pub(crate) last_used_at: u64,
     pub(crate) last_started_at: Option<u64>,
     pub(crate) last_finished_at: Option<u64>,
+    #[serde(default)]
+    pub(crate) command: CommandDescriptor,
+    #[serde(default, skip_serializing)]
     pub(crate) last_command: Vec<String>,
     pub(crate) last_outcome: Option<BuildOutcome>,
     pub(crate) pinned: bool,
@@ -66,6 +70,7 @@ impl ArenaManifest {
             last_used_at: now,
             last_started_at: None,
             last_finished_at: None,
+            command: CommandDescriptor::default(),
             last_command: Vec::new(),
             last_outcome: None,
             pinned: false,
@@ -154,7 +159,7 @@ impl ArenaManifest {
     pub(crate) fn begin(
         &mut self,
         context: &BuildContext,
-        command: Vec<String>,
+        command: CommandDescriptor,
         reservation: ByteSize,
         now: u64,
     ) {
@@ -165,7 +170,8 @@ impl ArenaManifest {
         self.last_used_at = now;
         self.last_started_at = Some(now);
         self.last_finished_at = None;
-        self.last_command = command;
+        self.command = command;
+        self.last_command.clear();
         self.last_outcome = None;
         self.reservation = reservation;
         self.retirement_id = None;

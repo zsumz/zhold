@@ -1,4 +1,4 @@
-pub(super) fn digest(namespace: &str, parts: &[&str]) -> String {
+pub(crate) fn digest(namespace: &str, parts: &[&str]) -> String {
     let mut hasher = blake3::Hasher::new();
     hasher.update(namespace.as_bytes());
     hasher.update(&[0]);

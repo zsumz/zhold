@@ -139,6 +139,32 @@ fn live_reservations_are_admission_accounting_and_clear_on_finish()
 }
 
 #[test]
+fn raw_cargo_arguments_are_never_persisted_or_exposed() -> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let project = tempdir()?;
+    let store = Store::open(temporary.path())?;
+    let context = context(project.path())?;
+    let secret = "registries.private.token='extremely-secret-token'";
+    let invocation = CargoInvocation::new(
+        "cargo".to_owned(),
+        vec!["--config".to_owned(), secret.to_owned(), "test".to_owned()],
+        project.path().to_path_buf(),
+    )?;
+
+    store
+        .lease(&context, &invocation)?
+        .finish(BuildOutcome::Succeeded)?;
+
+    let manifest = fs::read_to_string(store.layout.manifest(context.arena_id()))?;
+    let inventory = serde_json::to_string(&store.inventory()?)?;
+    assert!(!manifest.contains(secret));
+    assert!(!inventory.contains(secret));
+    assert!(manifest.contains("arguments_fingerprint"));
+    assert!(inventory.contains("arguments_fingerprint"));
+    Ok(())
+}
+
+#[test]
 fn expired_pins_stop_protecting_an_arena() -> Result<(), Box<dyn std::error::Error>> {
     let temporary = tempdir()?;
     let project = tempdir()?;

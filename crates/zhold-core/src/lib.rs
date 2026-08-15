@@ -13,8 +13,9 @@ pub use identity::{
     ArenaId, ParseIdentityError, RepositoryId, ToolchainId, WorkspaceId, WorktreeId, WorktreeKey,
 };
 pub use model::{
-    ArenaRecord, ArenaState, BuildOutcome, CollectionPlan, CollectionPolicy, Eviction,
-    EvictionReason, HistoryKind, HistoryPolicy, HookEvent, HookResult, ParseHistoryKindError,
-    ParseQuotaProviderError, QuotaHealth, QuotaProvider, WorktreeIntegrationState,
+    ArenaRecord, ArenaState, BuildOutcome, CargoCommandClass, CollectionPlan, CollectionPolicy,
+    CommandDescriptor, Eviction, EvictionReason, HistoryKind, HistoryPolicy, HookEvent, HookResult,
+    ParseHistoryKindError, ParseQuotaProviderError, QuotaHealth, QuotaProvider,
+    WorktreeIntegrationState,
 };
 pub use policy::{PolicyError, plan_collection, plan_collection_with_reservation};
