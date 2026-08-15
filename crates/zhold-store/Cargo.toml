@@ -1,0 +1,31 @@
+[package]
+name = "zhold-store"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+description = "Owned build arenas, leases, inventory, and safe collection for zhold"
+documentation = "https://docs.rs/zhold-store"
+readme.workspace = true
+keywords = ["cargo", "rust", "worktree", "storage", "build"]
+categories = ["development-tools::build-utils", "filesystem"]
+
+[dependencies]
+fs2.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+zhold-core.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

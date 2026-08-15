@@ -1,0 +1,22 @@
+[package]
+name = "zhold-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+description = "Deterministic domain model and retention policy for zhold"
+documentation = "https://docs.rs/zhold-core"
+readme.workspace = true
+keywords = ["cargo", "rust", "worktree", "storage", "build"]
+categories = ["development-tools::build-utils"]
+
+[dependencies]
+blake3.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

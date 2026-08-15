@@ -1,0 +1,6 @@
+/target/
+/.zhold-fixtures/
+.DS_Store
+*.tmp
+*.new
+*.bak
