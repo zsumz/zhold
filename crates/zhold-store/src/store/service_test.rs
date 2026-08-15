@@ -6,6 +6,30 @@ use zhold_core::BuildOutcome;
 use crate::{Store, lock::ExclusiveFileLock, test_support};
 
 #[test]
+fn read_only_open_does_not_create_or_repair_store_state() -> Result<(), Box<dyn std::error::Error>>
+{
+    let temporary = tempfile::tempdir()?;
+    let root = temporary.path().join("store");
+    let store = Store::open_read_write(&root)?;
+    let info = store.info();
+    drop(store);
+
+    let opened = Store::open_read_only(&root)?;
+    assert_eq!(opened.info(), info);
+    drop(opened);
+
+    std::fs::remove_dir(root.join("integrations/worktrees"))?;
+    let opened = Store::open_read_only(&root)?;
+    assert!(!root.join("integrations/worktrees").exists());
+    drop(opened);
+
+    let missing = temporary.path().join("missing");
+    assert!(Store::open_read_only(&missing).is_err());
+    assert!(!missing.exists());
+    Ok(())
+}
+
+#[test]
 fn contended_admission_does_not_hold_the_collection_lock() -> Result<(), Box<dyn std::error::Error>>
 {
     let store_root = tempdir()?;

@@ -13,7 +13,7 @@ use crate::{
     manifest::StoreMarker,
 };
 
-pub(super) fn open_marker(layout: &StoreLayout) -> Result<StoreMarker, StoreError> {
+pub(super) fn open_marker_read_write(layout: &StoreLayout) -> Result<StoreMarker, StoreError> {
     let marker_path = layout.marker();
     match fs::symlink_metadata(&marker_path) {
         Ok(metadata) => {
@@ -30,12 +30,25 @@ pub(super) fn open_marker(layout: &StoreLayout) -> Result<StoreMarker, StoreErro
             } else {
                 validate_marker(marker, marker_path)?
             };
-            verify_filesystem_capabilities(layout.root())?;
             Ok(marker)
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => initialize_marker(layout),
         Err(error) => Err(StoreError::io("inspect store marker", marker_path, error)),
     }
+}
+
+pub(super) fn open_marker_read_only(layout: &StoreLayout) -> Result<StoreMarker, StoreError> {
+    let marker_path = layout.marker();
+    let metadata = fs::symlink_metadata(&marker_path)
+        .map_err(|error| StoreError::io("inspect store marker", &marker_path, error))?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(StoreError::InvalidOwnership {
+            path: marker_path,
+            reason: "store marker is not a real file".to_owned(),
+        });
+    }
+    let marker = read_json(&marker_path)?;
+    validate_marker(marker, marker_path)
 }
 
 fn validate_marker(marker: StoreMarker, path: PathBuf) -> Result<StoreMarker, StoreError> {
@@ -264,4 +277,17 @@ pub(super) fn prepare_store_root(path: &Path) -> Result<(), StoreError> {
         });
     }
     secure_directory(path)
+}
+
+pub(super) fn inspect_store_root(path: &Path) -> Result<PathBuf, StoreError> {
+    let metadata = fs::symlink_metadata(path)
+        .map_err(|error| StoreError::io("inspect store root", path, error))?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(StoreError::InvalidOwnership {
+            path: path.to_path_buf(),
+            reason: "store root is not a real directory".to_owned(),
+        });
+    }
+    path.canonicalize()
+        .map_err(|error| StoreError::io("canonicalize store root", path, error))
 }

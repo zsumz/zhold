@@ -22,7 +22,7 @@ pub(crate) fn execute(cli: Cli) -> Result<ExitStatus, CliError> {
             _ => {}
         }
     }
-    let store = Store::open(root)?;
+    let store = open_store(&root, &command)?;
     if let Command::Setup {
         budget,
         min_free,
@@ -103,5 +103,13 @@ pub(crate) fn execute(cli: Cli) -> Result<ExitStatus, CliError> {
         Command::Hook { action } => super::hook::execute(&store, action, cli.format),
         #[cfg(feature = "experimental")]
         Command::Quota { action } => super::quota::execute(&store, &action, budget, cli.format),
+    }
+}
+
+fn open_store(root: &std::path::Path, command: &Command) -> Result<Store, CliError> {
+    if root.exists() && matches!(command, Command::Status { .. } | Command::Doctor) {
+        Ok(Store::open_read_only(root)?)
+    } else {
+        Ok(Store::open_read_write(root)?)
     }
 }

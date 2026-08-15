@@ -1,9 +1,6 @@
 //! Store opening and lifecycle operations.
 
-use std::{
-    env,
-    path::{Path, PathBuf},
-};
+use std::{env, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -20,10 +17,7 @@ use crate::{
     lock::ExclusiveFileLock,
     manifest::{ArenaManifest, StoreMarker},
     scan::scan,
-    store::initialization::{
-        ensure_layout, ensure_managed_directory, open_marker, prepare_arena_root,
-        prepare_store_root,
-    },
+    store::initialization::{ensure_managed_directory, prepare_arena_root},
     time::{unix_milliseconds, unix_seconds},
     worktree::acquire_admission,
 };
@@ -45,19 +39,6 @@ pub struct StoreInfo {
 }
 
 impl Store {
-    /// Opens an existing marked store or initializes an empty directory.
-    pub fn open(root: impl AsRef<Path>) -> Result<Self, StoreError> {
-        let requested = root.as_ref();
-        prepare_store_root(requested)?;
-        let root = requested
-            .canonicalize()
-            .map_err(|error| StoreError::io("canonicalize store root", requested, error))?;
-        let layout = StoreLayout::new(root);
-        let marker = open_marker(&layout)?;
-        ensure_layout(&layout)?;
-        Ok(Self { layout, marker })
-    }
-
     /// Derives the platform cache location used when no explicit store is configured.
     pub fn default_root() -> Result<PathBuf, StoreError> {
         if let Some(value) = env::var_os("ZHOLD_HOME") {
