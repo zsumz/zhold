@@ -1,4 +1,8 @@
-use std::{collections::BTreeSet, env, fs, path::PathBuf};
+use std::{
+    collections::BTreeSet,
+    env, fs,
+    path::{Path, PathBuf},
+};
 
 use crate::{CargoInvocation, StoreError};
 
@@ -45,7 +49,31 @@ pub(super) fn fingerprint(invocation: &CargoInvocation) -> Result<String, StoreE
     Ok(hasher.finalize().to_hex()[..32].to_owned())
 }
 
-fn discovered_files(directory: &std::path::Path) -> Vec<PathBuf> {
+pub(super) fn effective_rustc(invocation: &CargoInvocation) -> Result<String, StoreError> {
+    if let Some(program) = env::var_os("RUSTC").or_else(|| env::var_os("CARGO_BUILD_RUSTC")) {
+        return unicode_program(program, "Cargo compiler environment value");
+    }
+    let directory = invocation.effective_working_directory()?;
+    let mut program = None;
+    for path in discovered_files(&directory) {
+        if let Some(value) = compiler_from_file(&path, false)? {
+            program = Some(value);
+        }
+    }
+    for value in invocation.configuration_overrides()? {
+        let configured = if value.contains('=') {
+            compiler_from_toml(&value, "command-line Cargo configuration")?
+        } else {
+            compiler_from_file(&directory.join(value), true)?
+        };
+        if configured.is_some() {
+            program = configured;
+        }
+    }
+    normalize_program(program.as_deref().unwrap_or("rustc"), &directory)
+}
+
+fn discovered_files(directory: &Path) -> Vec<PathBuf> {
     let mut paths = Vec::new();
     if let Some(home) = cargo_home()
         && let Some(config) = config_at(&home)
@@ -60,6 +88,61 @@ fn discovered_files(directory: &std::path::Path) -> Vec<PathBuf> {
             .filter_map(|ancestor| config_at(&ancestor.join(".cargo"))),
     );
     paths
+}
+
+fn compiler_from_file(path: &Path, required: bool) -> Result<Option<String>, StoreError> {
+    let text = match fs::read_to_string(path) {
+        Ok(value) => value,
+        Err(error) if !required && error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(StoreError::io("read Cargo configuration", path, error)),
+    };
+    compiler_from_toml(&text, &format!("Cargo configuration `{}`", path.display()))
+}
+
+fn compiler_from_toml(text: &str, source: &str) -> Result<Option<String>, StoreError> {
+    let value: toml::Value = toml::from_str(text).map_err(|error| {
+        StoreError::InvalidCargoInvocation(format!("invalid {source}: {error}"))
+    })?;
+    value
+        .get("build")
+        .and_then(|build| build.get("rustc"))
+        .map(|rustc| {
+            rustc.as_str().map(str::to_owned).ok_or_else(|| {
+                StoreError::InvalidCargoInvocation(format!(
+                    "build.rustc in {source} must be a string"
+                ))
+            })
+        })
+        .transpose()
+}
+
+fn normalize_program(program: &str, directory: &Path) -> Result<String, StoreError> {
+    let path = Path::new(program);
+    if !path.is_absolute() && path.components().count() == 1 {
+        return Ok(program.to_owned());
+    }
+    let candidate = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        directory.join(path)
+    };
+    let canonical = candidate
+        .canonicalize()
+        .map_err(|error| StoreError::io("resolve configured Rust compiler", candidate, error))?;
+    canonical
+        .into_os_string()
+        .into_string()
+        .map_err(|value| StoreError::NonUnicode {
+            kind: "configured Rust compiler path",
+            path: PathBuf::from(value),
+        })
+}
+
+fn unicode_program(value: std::ffi::OsString, kind: &'static str) -> Result<String, StoreError> {
+    value.into_string().map_err(|value| StoreError::NonUnicode {
+        kind,
+        path: PathBuf::from(value),
+    })
 }
 
 fn cargo_home() -> Option<PathBuf> {

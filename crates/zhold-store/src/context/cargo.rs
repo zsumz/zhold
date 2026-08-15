@@ -1,4 +1,4 @@
-use std::{env, path::PathBuf};
+use std::path::PathBuf;
 
 use serde::Deserialize;
 
@@ -61,21 +61,9 @@ fn rustc_verbose(invocation: &CargoInvocation) -> Result<(String, String), Store
     let environment = invocation
         .toolchain_override()
         .map(|toolchain| ("RUSTUP_TOOLCHAIN", toolchain));
-    let program = match env::var_os("RUSTC").or_else(|| env::var_os("CARGO_BUILD_RUSTC")) {
-        Some(value) => value
-            .into_string()
-            .map_err(|value| StoreError::NonUnicode {
-                kind: "Rust compiler path",
-                path: PathBuf::from(value),
-            })?,
-        None => "rustc".to_owned(),
-    };
-    let verbose = process::required_output(
-        &program,
-        &arguments,
-        invocation.working_directory(),
-        environment,
-    )?;
+    let program = super::config_identity::effective_rustc(invocation)?;
+    let directory = invocation.effective_working_directory()?;
+    let verbose = process::required_output(&program, &arguments, &directory, environment)?;
     Ok((program, verbose))
 }
 

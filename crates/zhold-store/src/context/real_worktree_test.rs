@@ -77,6 +77,36 @@ fn configured_compiler_participates_in_arena_identity() -> Result<(), Box<dyn st
     Ok(())
 }
 
+#[test]
+fn replacing_a_configured_compiler_at_the_same_path_changes_identity()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let root = temporary.path().join("repository");
+    let proxy_source = temporary.path().join("rustc-proxy.rs");
+    let proxy = temporary.path().join(if cfg!(windows) {
+        "rustc-proxy.exe"
+    } else {
+        "rustc-proxy"
+    });
+    fs::create_dir(&root)?;
+    create_project(&root)?;
+    git(&root, &["init"])?;
+    fs::create_dir(root.join(".cargo"))?;
+    fs::write(
+        root.join(".cargo/config.toml"),
+        format!("[build]\nrustc = {:?}\n", proxy.display().to_string()),
+    )?;
+
+    compile_proxy(&proxy_source, &proxy, "first")?;
+    let first = ContextResolver::resolve(&invocation(&root)?)?;
+    compile_proxy(&proxy_source, &proxy, "second")?;
+    let second = ContextResolver::resolve(&invocation(&root)?)?;
+
+    assert_ne!(first.toolchain_id, second.toolchain_id);
+    assert_ne!(first.arena_id, second.arena_id);
+    Ok(())
+}
+
 fn create_project(root: &Path) -> Result<(), io::Error> {
     fs::create_dir_all(root.join("src"))?;
     fs::write(
@@ -84,6 +114,34 @@ fn create_project(root: &Path) -> Result<(), io::Error> {
         "[package]\nname = \"worktree-fixture\"\nversion = \"0.1.0-alpha.1\"\nedition = \"2024\"\n",
     )?;
     fs::write(root.join("src/lib.rs"), "pub fn answer() -> u8 { 42 }\n")
+}
+
+fn compile_proxy(source: &Path, output: &Path, generation: &str) -> Result<(), io::Error> {
+    fs::write(
+        source,
+        format!(
+            "use std::{{env, io::Write, process::Command}};\n\
+             fn main() {{\n\
+                 let args = env::args_os().skip(1).collect::<Vec<_>>();\n\
+                 let result = Command::new(\"rustc\").args(&args).output();\n\
+                 let Ok(result) = result else {{ std::process::exit(80); }};\n\
+                 let _out = std::io::stdout().write_all(&result.stdout);\n\
+                 if args.iter().any(|arg| arg == \"-vV\") {{ println!(\"zhold-proxy: {generation}\"); }}\n\
+                 let _err = std::io::stderr().write_all(&result.stderr);\n\
+                 std::process::exit(result.status.code().unwrap_or(1));\n\
+             }}\n"
+        ),
+    )?;
+    let status = Command::new("rustc")
+        .arg(source)
+        .arg("-o")
+        .arg(output)
+        .status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(io::Error::other("failed to compile Rust compiler proxy"))
+    }
 }
 
 fn invocation(root: &Path) -> Result<CargoInvocation, crate::StoreError> {

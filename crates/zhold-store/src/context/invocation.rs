@@ -124,12 +124,12 @@ impl CargoInvocation {
             match argument.as_str() {
                 "-C" => {
                     let value = required_value(&self.arguments, index, argument)?;
-                    directory = resolve_directory(&self.working_directory, value);
+                    directory = resolve_directory(&directory, value);
                     index = index.saturating_add(2);
                 }
                 "-Z" | "--color" | "--config" => index = index.saturating_add(2),
                 _ if argument.starts_with("-C") && argument.len() > 2 => {
-                    directory = resolve_directory(&self.working_directory, &argument[2..]);
+                    directory = resolve_directory(&directory, &argument[2..]);
                     index = index.saturating_add(1);
                 }
                 _ if argument.starts_with('-') => index = index.saturating_add(1),

@@ -128,3 +128,26 @@ fn managed_build_directory_has_final_configuration_precedence()
     );
     Ok(())
 }
+
+#[test]
+fn repeated_change_directory_options_compose_in_order() -> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempfile::tempdir()?;
+    let nested = temporary.path().join("one/two");
+    std::fs::create_dir_all(&nested)?;
+    let invocation = CargoInvocation::new(
+        "cargo".to_owned(),
+        vec![
+            "-C".to_owned(),
+            "one".to_owned(),
+            "-Ctwo".to_owned(),
+            "check".to_owned(),
+        ],
+        temporary.path().to_path_buf(),
+    )?;
+
+    assert_eq!(
+        invocation.effective_working_directory()?,
+        nested.canonicalize()?
+    );
+    Ok(())
+}
