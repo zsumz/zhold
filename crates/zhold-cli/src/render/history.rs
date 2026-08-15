@@ -45,6 +45,7 @@ pub(crate) fn finalization(
 ) -> Result<(), CliError> {
     for warning in &finalization.warnings {
         let event = match warning.event {
+            FinalizationWarningEvent::MetadataCleanupFailed => "metadata_cleanup_failed",
             FinalizationWarningEvent::ReservationLearningFailed => "reservation_learning_failed",
         };
         if matches!(format, OutputFormat::Json) {

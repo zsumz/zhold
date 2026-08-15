@@ -118,11 +118,10 @@ impl ArenaLease {
         )?;
         self.finished = true;
         self.release_locks();
-        let warnings = if matches!(outcome, BuildOutcome::NotStarted) {
-            Vec::new()
-        } else {
-            self.learn_reservation(primary.command_class, primary.observed_growth)
-        };
+        let mut warnings = primary.warnings;
+        if !matches!(outcome, BuildOutcome::NotStarted) {
+            warnings.extend(self.learn_reservation(primary.command_class, primary.observed_growth));
+        }
         self.pending_history.push(primary.history);
         let history = self
             .pending_history

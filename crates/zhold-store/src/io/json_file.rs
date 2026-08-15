@@ -9,21 +9,38 @@ use uuid::Uuid;
 
 use crate::{
     StoreError,
-    io::{configure_private_file, secure_file, secure_open_file},
+    io::{
+        configure_private_file,
+        json_publish::{JsonPublication, replace_with_backup, sync_metadata_directory},
+        secure_file, secure_open_file,
+    },
 };
+
+#[cfg(test)]
+use crate::io::json_publish::{PublicationPoint, replace_with_backup_with};
 
 pub(crate) fn read_json<T: DeserializeOwned>(path: &Path) -> Result<T, StoreError> {
     match read_one(path) {
         Ok(value) => Ok(value),
-        Err(StoreError::Json { .. } | StoreError::Io { .. }) => {
-            let backup = backup_path(path);
-            if is_real_file(&backup)? {
-                read_one(&backup)
-            } else {
-                read_one(path)
-            }
-        }
+        Err(error) if backup_eligible(&error) => read_backup(path, error),
         Err(error) => Err(error),
+    }
+}
+
+pub(super) fn backup_eligible(error: &StoreError) -> bool {
+    match error {
+        StoreError::Json { .. } => true,
+        StoreError::Io { source, .. } => source.kind() == std::io::ErrorKind::NotFound,
+        _ => false,
+    }
+}
+
+fn read_backup<T: DeserializeOwned>(path: &Path, primary: StoreError) -> Result<T, StoreError> {
+    let backup = backup_path(path);
+    if is_real_file(&backup)? {
+        read_one(&backup)
+    } else {
+        Err(primary)
     }
 }
 
@@ -60,6 +77,14 @@ pub(crate) fn create_json<T: Serialize>(path: &Path, value: &T) -> Result<bool, 
 }
 
 pub(crate) fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), StoreError> {
+    let _publication = write_json_commit_aware(path, value)?;
+    Ok(())
+}
+
+pub(crate) fn write_json_commit_aware<T: Serialize>(
+    path: &Path,
+    value: &T,
+) -> Result<JsonPublication, StoreError> {
     validate_metadata_parent(path)?;
     validate_existing_file(path)?;
     let temporary = temporary_path(path);
@@ -119,51 +144,44 @@ fn read_one<T: DeserializeOwned>(path: &Path) -> Result<T, StoreError> {
     serde_json::from_slice(&bytes).map_err(|error| StoreError::json(path, error))
 }
 
-fn replace_with_backup(path: &Path, temporary: &Path) -> Result<(), StoreError> {
-    let backup = backup_path(path);
-    validate_existing_file(&backup)?;
-    let primary_exists = is_real_file(path)?;
-    let backup_exists = is_real_file(&backup)?;
-    if primary_exists {
-        if backup_exists {
-            fs::remove_file(&backup)
-                .map_err(|error| StoreError::io("remove stale metadata backup", &backup, error))?;
+#[cfg(test)]
+pub(super) fn write_json_with_fault<T: Serialize>(
+    path: &Path,
+    value: &T,
+    fault: &'static str,
+) -> Result<JsonPublication, StoreError> {
+    validate_metadata_parent(path)?;
+    validate_existing_file(path)?;
+    let temporary = temporary_path(path);
+    let bytes = encoded(path, value)?;
+    let mut options = OpenOptions::new();
+    options.create_new(true).write(true);
+    configure_private_file(&mut options);
+    let mut file = options
+        .open(&temporary)
+        .map_err(|error| StoreError::io("create metadata staging file", &temporary, error))?;
+    secure_open_file(&file, &temporary)?;
+    write_and_sync(&mut file, &temporary, &bytes)?;
+    replace_with_backup_with(path, &temporary, |point| {
+        let name = match point {
+            PublicationPoint::PrimaryRotated => "primary_rotated",
+            PublicationPoint::PrimaryPublished => "primary_published",
+            PublicationPoint::BeforePublishedDirectorySync => "published_directory_sync",
+            PublicationPoint::PublishedDirectorySynced => "published_directory_synced",
+            PublicationPoint::BeforeBackupRemoval => "backup_removal",
+            PublicationPoint::BackupRemoved => "backup_removed",
+            PublicationPoint::BeforeFinalDirectorySync => "final_directory_sync",
+        };
+        if name == fault {
+            Err(StoreError::io(
+                "inject metadata publication fault",
+                path,
+                std::io::Error::other(name),
+            ))
+        } else {
+            Ok(())
         }
-        fs::rename(path, &backup)
-            .map_err(|error| StoreError::io("rotate metadata backup", path, error))?;
-        sync_metadata_directory(path)?;
-    }
-    if let Err(error) = fs::rename(temporary, path) {
-        if is_real_file(&backup)? {
-            fs::rename(&backup, path)
-                .map_err(|recovery| StoreError::io("restore metadata backup", path, recovery))?;
-            sync_metadata_directory(path)?;
-        }
-        return Err(StoreError::io("publish metadata", path, error));
-    }
-    sync_metadata_directory(path)?;
-    if is_real_file(&backup)? {
-        fs::remove_file(&backup)
-            .map_err(|error| StoreError::io("remove metadata backup", &backup, error))?;
-        sync_metadata_directory(path)?;
-    }
-    Ok(())
-}
-
-#[cfg(unix)]
-fn sync_metadata_directory(path: &Path) -> Result<(), StoreError> {
-    let parent = metadata_parent(path)?;
-    let directory = fs::File::open(parent)
-        .map_err(|error| StoreError::io("open metadata directory for sync", parent, error))?;
-    directory
-        .sync_all()
-        .map_err(|error| StoreError::io("sync metadata directory", parent, error))
-}
-
-#[cfg(not(unix))]
-#[allow(clippy::unnecessary_wraps)]
-fn sync_metadata_directory(_path: &Path) -> Result<(), StoreError> {
-    Ok(())
+    })
 }
 
 fn validate_metadata_parent(path: &Path) -> Result<(), StoreError> {
@@ -179,7 +197,7 @@ fn validate_metadata_parent(path: &Path) -> Result<(), StoreError> {
     Ok(())
 }
 
-fn metadata_parent(path: &Path) -> Result<&Path, StoreError> {
+pub(super) fn metadata_parent(path: &Path) -> Result<&Path, StoreError> {
     path.parent().ok_or_else(|| {
         StoreError::io(
             "resolve metadata parent",
@@ -192,7 +210,7 @@ fn metadata_parent(path: &Path) -> Result<&Path, StoreError> {
     })
 }
 
-fn validate_existing_file(path: &Path) -> Result<(), StoreError> {
+pub(super) fn validate_existing_file(path: &Path) -> Result<(), StoreError> {
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
             Err(StoreError::InvalidOwnership {
@@ -206,7 +224,7 @@ fn validate_existing_file(path: &Path) -> Result<(), StoreError> {
     }
 }
 
-fn is_real_file(path: &Path) -> Result<bool, StoreError> {
+pub(super) fn is_real_file(path: &Path) -> Result<bool, StoreError> {
     match fs::symlink_metadata(path) {
         Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
             Err(StoreError::InvalidOwnership {
@@ -223,7 +241,7 @@ fn is_real_file(path: &Path) -> Result<bool, StoreError> {
     }
 }
 
-fn backup_path(path: &Path) -> PathBuf {
+pub(super) fn backup_path(path: &Path) -> PathBuf {
     path.with_extension("json.bak")
 }
 

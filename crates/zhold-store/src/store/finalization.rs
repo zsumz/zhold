@@ -1,9 +1,9 @@
 use zhold_core::{ArenaId, BuildOutcome, ByteSize, CargoCommandClass};
 
 use crate::{
-    BuildReceipt, Store, StoreError,
+    BuildReceipt, FinalizationWarning, FinalizationWarningEvent, Store, StoreError,
     history::HistoryDraft,
-    io::{read_json, write_json},
+    io::{read_json, write_json_commit_aware},
     lock::ExclusiveFileLock,
     manifest::ArenaManifest,
     time::{unix_milliseconds, unix_seconds},
@@ -13,6 +13,7 @@ pub(crate) struct PrimaryFinalization {
     pub(crate) history: HistoryDraft,
     pub(crate) command_class: CargoCommandClass,
     pub(crate) observed_growth: ByteSize,
+    pub(crate) warnings: Vec<FinalizationWarning>,
 }
 
 impl Store {
@@ -45,7 +46,15 @@ impl Store {
             Some(final_bytes),
             finished_seconds,
         );
-        write_json(&manifest_path, &manifest)?;
+        let publication = write_json_commit_aware(&manifest_path, &manifest)?;
+        let warnings = publication
+            .cleanup_warning()
+            .map_or_else(Vec::new, |error| {
+                vec![FinalizationWarning {
+                    event: FinalizationWarningEvent::MetadataCleanupFailed,
+                    message: error.to_string(),
+                }]
+            });
         let observed_growth = high_water_observation.saturating_sub(initial_bytes);
         let history = HistoryDraft::build(
             BuildReceipt {
@@ -78,6 +87,7 @@ impl Store {
             history,
             command_class,
             observed_growth,
+            warnings,
         })
     }
 }

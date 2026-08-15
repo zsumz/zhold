@@ -156,6 +156,8 @@ pub struct HistoryWrite {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FinalizationWarningEvent {
+    /// The authoritative manifest committed, but publication cleanup was incomplete.
+    MetadataCleanupFailed,
     /// The authoritative manifest committed, but reservation learning failed.
     ReservationLearningFailed,
 }
