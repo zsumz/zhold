@@ -109,7 +109,7 @@ fn plan_and_failed_adoption_never_create_expectation() -> Result<(), Box<dyn std
 }
 
 #[test]
-fn exact_external_enforcement_can_be_adopted_and_gates_reservations()
+fn exact_external_enforcement_can_be_adopted_and_gates_aggregate_reservations()
 -> Result<(), Box<dyn std::error::Error>> {
     let temporary = tempdir()?;
     let store = Store::open(temporary.path().join("store"))?;
@@ -142,8 +142,11 @@ fn exact_external_enforcement_can_be_adopted_and_gates_reservations()
     assert!(!repeated.attention_required);
 
     let status = super::service::quota_status_with_probe(&store, QuotaProvider::Auto, &probe)?;
-    assert!(super::admission::validate(&status, ByteSize::from_bytes(800)).is_ok());
-    assert!(super::admission::validate(&status, ByteSize::from_bytes(801)).is_err());
+    let first = ByteSize::from_bytes(500);
+    let second = ByteSize::from_bytes(301);
+    assert!(super::admission::validate(&status, first).is_ok());
+    assert!(super::admission::validate(&status, second).is_ok());
+    assert!(super::admission::validate(&status, first + second).is_err());
     let at_limit = super::service::status(
         status.expectation,
         configured(

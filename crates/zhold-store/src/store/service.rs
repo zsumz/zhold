@@ -117,7 +117,13 @@ impl Store {
         let id = context.arena_id();
         let worktree = acquire_admission(self, context)?;
         let (_collection_lock, arena_lock) = self.admission_locks(id)?;
-        self.lease_reserved_locked(context, invocation, reservation, (arena_lock, worktree))
+        let lease =
+            self.lease_reserved_locked(context, invocation, reservation, (arena_lock, worktree))?;
+        if self.has_adopted_quota()? {
+            let aggregate_reservation = read_inventory(self)?.reserved;
+            self.verify_quota_admission(aggregate_reservation)?;
+        }
+        Ok(lease)
     }
 
     /// Acquires a reserved lease and performs collection as one serialized admission.
@@ -134,6 +140,7 @@ impl Store {
         let mut lease =
             self.lease_reserved_locked(context, invocation, reservation, (arena_lock, worktree))?;
         let report = collect_locked(self, policy, false)?;
+        self.verify_quota_admission(report.reserved)?;
         lease.queue_history(HistoryDraft::collection(
             &report,
             CollectionReceiptSource::Preflight,

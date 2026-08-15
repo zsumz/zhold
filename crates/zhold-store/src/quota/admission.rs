@@ -3,7 +3,10 @@ use zhold_core::ByteSize;
 use super::QuotaStatus;
 use crate::StoreError;
 
-pub(super) fn validate(status: &QuotaStatus, reservation: ByteSize) -> Result<(), StoreError> {
+pub(super) fn validate(
+    status: &QuotaStatus,
+    aggregate_reservation: ByteSize,
+) -> Result<(), StoreError> {
     if !status.healthy {
         return Err(StoreError::QuotaAdmissionBlocked(format!(
             "adopted {} enforcement is not healthy: {}",
@@ -20,9 +23,9 @@ pub(super) fn validate(status: &QuotaStatus, reservation: ByteSize) -> Result<()
             "the adopted hard quota is already at its limit".to_owned(),
         ));
     }
-    if reservation > remaining {
+    if aggregate_reservation > remaining {
         return Err(StoreError::QuotaAdmissionBlocked(format!(
-            "declared reservation {reservation} exceeds quota remaining {remaining}"
+            "aggregate live reservation {aggregate_reservation} exceeds quota remaining {remaining}"
         )));
     }
     Ok(())

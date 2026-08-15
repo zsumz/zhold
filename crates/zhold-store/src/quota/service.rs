@@ -13,6 +13,10 @@ use crate::{
 };
 
 impl Store {
+    pub(crate) fn has_adopted_quota(&self) -> Result<bool, StoreError> {
+        read_expectation(self).map(|expectation| expectation.is_some())
+    }
+
     /// Inspects current capability and verifies any adopted expectation.
     pub fn quota_status(&self, requested: QuotaProvider) -> Result<QuotaStatus, StoreError> {
         quota_status_with_probe(self, requested, &SystemQuotaProbe)
@@ -70,16 +74,16 @@ impl Store {
         Ok(result)
     }
 
-    /// Verifies adopted enforcement and declared growth immediately before process spawn.
+    /// Verifies adopted enforcement and aggregate live growth before process spawn.
     pub fn verify_quota_admission(
         &self,
-        reservation: ByteSize,
+        aggregate_reservation: ByteSize,
     ) -> Result<Option<QuotaStatus>, StoreError> {
         let Some(expectation) = read_expectation(self)? else {
             return Ok(None);
         };
         let status = self.quota_status(expectation.provider)?;
-        super::admission::validate(&status, reservation)?;
+        super::admission::validate(&status, aggregate_reservation)?;
         Ok(Some(status))
     }
 
