@@ -34,8 +34,6 @@ pub(crate) struct ArenaManifest {
     pub(crate) last_finished_at: Option<u64>,
     #[serde(default)]
     pub(crate) command: CommandDescriptor,
-    #[serde(default, skip_serializing)]
-    pub(crate) last_command: Vec<String>,
     pub(crate) last_outcome: Option<BuildOutcome>,
     pub(crate) pinned: bool,
     #[serde(default)]
@@ -73,7 +71,6 @@ impl ArenaManifest {
             last_started_at: None,
             last_finished_at: None,
             command: CommandDescriptor::default(),
-            last_command: Vec::new(),
             last_outcome: None,
             pinned: false,
             pin_expires_at: None,
@@ -174,7 +171,6 @@ impl ArenaManifest {
         self.last_started_at = Some(now);
         self.last_finished_at = None;
         self.command = command;
-        self.last_command.clear();
         self.last_outcome = None;
         self.reservation = reservation;
         self.retirement_id = None;

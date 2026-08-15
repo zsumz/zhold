@@ -160,6 +160,80 @@ def check_test_modules(checks: Checks) -> None:
         )
 
 
+def production_rust_files(root: Path) -> list[Path]:
+    return [
+        path
+        for path in sorted(root.rglob("*.rs"))
+        if not path.name.endswith("_test.rs") and "tests" not in path.parts
+    ]
+
+
+def code(path: Path) -> str:
+    return strip_rust_literals_and_comments(path.read_text(encoding="utf-8"))
+
+
+def check_capability_boundaries(checks: Checks) -> None:
+    core = CRATES / "zhold-core" / "src"
+    for path in production_rust_files(core):
+        text = code(path)
+        for token in ["std::fs", "std::process", "std::thread", "std::os::"]:
+            checks.require(
+                token not in text,
+                f"{relative(path)} gives pure policy code the {token} capability",
+            )
+
+    cli = CRATES / "zhold-cli" / "src"
+    for path in production_rust_files(cli):
+        text = code(path)
+        for pattern in [r"\bremove_tree\s*\(", r"\bremove_dir_all\s*\(", r"\bfs::rename\s*\("]:
+            checks.require(
+                re.search(pattern, text) is None,
+                f"{relative(path)} performs a store-owned destructive filesystem operation",
+            )
+
+    store = CRATES / "zhold-store" / "src"
+    allowed_tree_callers = {
+        "crates/zhold-store/src/io/tree.rs",
+        "crates/zhold-store/src/collection/collector.rs",
+        "crates/zhold-store/src/collection/trash.rs",
+    }
+    allowed_renamers = allowed_tree_callers | {"crates/zhold-store/src/io/json_file.rs"}
+    for path in production_rust_files(store):
+        text = code(path)
+        name = relative(path)
+        if re.search(r"\bremove_tree\s*\(", text):
+            checks.require(name in allowed_tree_callers, f"{name} can recursively delete trees")
+        if re.search(r"\bfs::rename\s*\(", text):
+            checks.require(name in allowed_renamers, f"{name} can rename managed paths")
+
+    for path in production_rust_files(store / "quota"):
+        text = code(path)
+        checks.require("ArenaManifest" not in text, f"{relative(path)} can access arena manifests")
+        checks.require(
+            re.search(r"\b(?:layout\.)?manifest\s*\(", text) is None,
+            f"{relative(path)} can resolve arena manifests",
+        )
+
+    for path in production_rust_files(cli / "render"):
+        text = code(path)
+        checks.require("Store::open" not in text, f"{relative(path)} opens the store directly")
+        checks.require(
+            re.search(r"\bzhold_store::Store\b", text) is None,
+            f"{relative(path)} imports the store service directly",
+        )
+
+    persisted_models = [
+        store / "manifest" / "arena_manifest.rs",
+        store / "history" / "receipt.rs",
+    ]
+    for path in persisted_models:
+        text = code(path)
+        checks.require(
+            "Vec<String>" not in text,
+            f"{relative(path)} can persist an unbounded raw command vector",
+        )
+
+
 def check_delimiters(checks: Checks) -> None:
     pairs = {"(": ")", "[": "]", "{": "}"}
     closers = set(pairs.values())
@@ -277,6 +351,7 @@ def main() -> int:
     check_name_contract(checks)
     check_rust(checks)
     check_test_modules(checks)
+    check_capability_boundaries(checks)
     check_delimiters(checks)
     return checks.finish()
 
