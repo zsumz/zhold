@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
 use super::{CargoInvocation, ContextResolver, cargo::parse_version};
 
@@ -153,6 +153,96 @@ fn repeated_change_directory_options_compose_in_order() -> Result<(), Box<dyn st
 }
 
 #[test]
+fn project_config_resolves_relative_rustc_from_the_config_origin()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempfile::tempdir()?;
+    let cargo = temporary.path().join(".cargo");
+    let compiler = temporary.path().join("tools/rustc");
+    fs::create_dir_all(&cargo)?;
+    fs::create_dir_all(compiler.parent().ok_or("compiler has no parent")?)?;
+    fs::write(&compiler, b"fixture")?;
+    fs::write(
+        cargo.join("config.toml"),
+        "[build]\nrustc = 'tools/rustc'\n",
+    )?;
+    let invocation = CargoInvocation::new(
+        "cargo".to_owned(),
+        vec!["check".to_owned()],
+        temporary.path().to_path_buf(),
+    )?;
+
+    let configuration = super::config_identity::resolve(&invocation, &[3; 32])?;
+
+    assert_eq!(
+        configuration.rustc_program,
+        compiler.canonicalize()?.to_str().ok_or("path")?
+    );
+    Ok(())
+}
+
+#[test]
+fn explicit_config_file_uses_the_same_source_relative_path_rule()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempfile::tempdir()?;
+    let cargo = temporary.path().join(".cargo");
+    let compiler = temporary.path().join("tools/rustc");
+    fs::create_dir_all(&cargo)?;
+    fs::create_dir_all(compiler.parent().ok_or("compiler has no parent")?)?;
+    fs::write(&compiler, b"fixture")?;
+    let config = cargo.join("explicit.toml");
+    fs::write(&config, "[build]\nrustc = 'tools/rustc'\n")?;
+    let invocation = CargoInvocation::new(
+        "cargo".to_owned(),
+        vec![
+            "--config".to_owned(),
+            config.display().to_string(),
+            "check".to_owned(),
+        ],
+        temporary.path().to_path_buf(),
+    )?;
+
+    let configuration = super::config_identity::resolve(&invocation, &[3; 32])?;
+
+    assert_eq!(
+        configuration.rustc_program,
+        compiler.canonicalize()?.to_str().ok_or("path")?
+    );
+    Ok(())
+}
+
+#[test]
+fn recursive_includes_support_optional_files_and_detect_cycles()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempfile::tempdir()?;
+    let cargo = temporary.path().join(".cargo");
+    let nested = cargo.join("nested");
+    let compiler = cargo.join("tools/rustc");
+    fs::create_dir_all(&nested)?;
+    fs::create_dir_all(compiler.parent().ok_or("compiler has no parent")?)?;
+    fs::write(&compiler, b"fixture")?;
+    fs::write(
+        cargo.join("top.toml"),
+        "include = ['nested/one.toml', { path = 'missing.toml', optional = true }]\n",
+    )?;
+    fs::write(nested.join("one.toml"), "include = ['two.toml']\n")?;
+    fs::write(nested.join("two.toml"), "[build]\nrustc = 'tools/rustc'\n")?;
+    let invocation = explicit_config_invocation(temporary.path(), &cargo.join("top.toml"))?;
+
+    let configuration = super::config_identity::resolve(&invocation, &[4; 32])?;
+    assert_eq!(
+        configuration.rustc_program,
+        compiler.canonicalize()?.to_str().ok_or("path")?
+    );
+
+    fs::write(nested.join("two.toml"), "include = ['one.toml']\n")?;
+    let error = super::config_identity::resolve(&invocation, &[4; 32])
+        .err()
+        .ok_or("include cycle unexpectedly resolved")?;
+    assert!(error.to_string().contains("include cycle"));
+    Ok(())
+}
+
+#[test]
 fn failed_context_subprocesses_do_not_render_arbitrary_arguments()
 -> Result<(), Box<dyn std::error::Error>> {
     let temporary = tempfile::tempdir()?;
@@ -169,11 +259,26 @@ fn failed_context_subprocesses_do_not_render_arbitrary_arguments()
         temporary.path().to_path_buf(),
     )?;
 
-    let Err(error) = ContextResolver::resolve(&invocation) else {
+    let Err(error) = ContextResolver::resolve(&invocation, &[7; 32]) else {
         return Err("missing Cargo manifest unexpectedly resolved".into());
     };
 
     assert!(!error.to_string().contains(secret));
     assert!(error.to_string().contains("Cargo metadata query"));
     Ok(())
+}
+
+fn explicit_config_invocation(
+    root: &std::path::Path,
+    config: &std::path::Path,
+) -> Result<CargoInvocation, crate::StoreError> {
+    CargoInvocation::new(
+        "cargo".to_owned(),
+        vec![
+            "--config".to_owned(),
+            config.display().to_string(),
+            "check".to_owned(),
+        ],
+        root.to_path_buf(),
+    )
 }

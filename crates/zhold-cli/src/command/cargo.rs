@@ -8,7 +8,7 @@ use std::{
 
 use serde::Serialize;
 use zhold_core::{ArenaId, BuildOutcome, ByteSize, CollectionPolicy};
-use zhold_store::{CargoInvocation, ContextResolver, Store};
+use zhold_store::{CargoInvocation, Store};
 
 use crate::{
     CliError,
@@ -91,7 +91,7 @@ fn execute_managed(
     let working_directory = env::current_dir().map_err(CliError::CurrentDirectory)?;
     let invocation =
         CargoInvocation::new("cargo".to_owned(), arguments, working_directory.clone())?;
-    let context = ContextResolver::resolve(&invocation)?;
+    let context = store.resolve_context(&invocation)?;
     let minimum_reservation = limits.build_reserve.unwrap_or(DEFAULT_BUILD_RESERVATION);
     let reservation = store.recommended_reservation(&invocation, minimum_reservation)?;
     let budget = limits.budget;

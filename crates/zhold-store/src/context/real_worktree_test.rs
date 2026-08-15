@@ -2,7 +2,7 @@ use std::{fs, io, path::Path, process::Command};
 
 use tempfile::tempdir;
 
-use super::{CargoInvocation, ContextResolver};
+use super::{BuildContext, CargoInvocation, ContextResolver};
 
 #[test]
 fn physical_git_worktrees_receive_distinct_arenas_in_one_repository()
@@ -19,8 +19,8 @@ fn physical_git_worktrees_receive_distinct_arenas_in_one_repository()
     git(&main, &["commit", "-m", "initial"])?;
     git_worktree(&main, &agent)?;
 
-    let main_context = ContextResolver::resolve(&invocation(&main)?)?;
-    let agent_context = ContextResolver::resolve(&invocation(&agent)?)?;
+    let main_context = resolve(&invocation(&main)?)?;
+    let agent_context = resolve(&invocation(&agent)?)?;
 
     assert_eq!(main_context.repository_id, agent_context.repository_id);
     assert_ne!(main_context.worktree_id, agent_context.worktree_id);
@@ -44,8 +44,8 @@ fn manifest_path_selects_distinct_workspaces_in_one_worktree()
     create_project(&second)?;
     git(&root, &["init"])?;
 
-    let first_context = ContextResolver::resolve(&manifest_invocation(&root, &first)?)?;
-    let second_context = ContextResolver::resolve(&manifest_invocation(&root, &second)?)?;
+    let first_context = resolve(&manifest_invocation(&root, &first)?)?;
+    let second_context = resolve(&manifest_invocation(&root, &second)?)?;
 
     assert_eq!(first_context.repository_id, second_context.repository_id);
     assert_eq!(first_context.worktree_id, second_context.worktree_id);
@@ -66,11 +66,11 @@ fn configured_compiler_participates_in_arena_identity() -> Result<(), Box<dyn st
     fs::create_dir(root.join(".cargo"))?;
     let config = root.join(".cargo/config.toml");
     fs::write(&config, "[build]\nrustc = 'rustc'\n")?;
-    let first = ContextResolver::resolve(&invocation(&root)?)?;
+    let first = resolve(&invocation(&root)?)?;
 
     let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".to_owned());
     fs::write(&config, format!("[build]\nrustc = {rustc:?}\n"))?;
-    let second = ContextResolver::resolve(&invocation(&root)?)?;
+    let second = resolve(&invocation(&root)?)?;
 
     assert_ne!(first.toolchain_id, second.toolchain_id);
     assert_ne!(first.arena_id, second.arena_id);
@@ -98,9 +98,9 @@ fn replacing_a_configured_compiler_at_the_same_path_changes_identity()
     )?;
 
     compile_proxy(&proxy_source, &proxy, "first")?;
-    let first = ContextResolver::resolve(&invocation(&root)?)?;
+    let first = resolve(&invocation(&root)?)?;
     compile_proxy(&proxy_source, &proxy, "second")?;
-    let second = ContextResolver::resolve(&invocation(&root)?)?;
+    let second = resolve(&invocation(&root)?)?;
 
     assert_ne!(first.toolchain_id, second.toolchain_id);
     assert_ne!(first.arena_id, second.arena_id);
@@ -150,6 +150,10 @@ fn invocation(root: &Path) -> Result<CargoInvocation, crate::StoreError> {
         vec!["check".to_owned()],
         root.to_path_buf(),
     )
+}
+
+fn resolve(invocation: &CargoInvocation) -> Result<BuildContext, crate::StoreError> {
+    ContextResolver::resolve(invocation, &[7; 32])
 }
 
 fn manifest_invocation(

@@ -98,6 +98,14 @@ impl Store {
             })
     }
 
+    /// Resolves a Cargo invocation using this store's private compatibility key.
+    pub fn resolve_context(
+        &self,
+        invocation: &CargoInvocation,
+    ) -> Result<BuildContext, StoreError> {
+        crate::ContextResolver::resolve(invocation, self.marker.fingerprint_key())
+    }
+
     /// Acquires the arena lease and records the beginning of a managed Cargo command.
     pub fn lease(
         &self,

@@ -2,7 +2,11 @@
 
 mod build_context;
 mod cargo;
+mod config_discovery;
 mod config_identity;
+mod config_loader;
+#[cfg(test)]
+mod config_test;
 mod git;
 mod invocation;
 mod process;

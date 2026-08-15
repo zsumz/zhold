@@ -16,19 +16,23 @@ struct MetadataOutput {
     workspace_root: PathBuf,
 }
 
-pub(super) fn resolve(invocation: &CargoInvocation) -> Result<CargoContext, StoreError> {
+pub(super) fn resolve(
+    invocation: &CargoInvocation,
+    fingerprint_key: &[u8; 32],
+) -> Result<CargoContext, StoreError> {
     let prefix = invocation.toolchain_arguments();
     let version = cargo_version(invocation, &prefix)?;
     ensure_supported(&version)?;
     let workspace_root = workspace_root(invocation)?;
     let cargo_verbose = cargo_verbose(invocation, &prefix)?;
-    let (rustc_program, rustc_verbose) = rustc_verbose(invocation)?;
-    let configuration = super::config_identity::fingerprint(invocation)?;
+    let configuration = super::config_identity::resolve(invocation, fingerprint_key)?;
+    let (rustc_program, rustc_verbose) = rustc_verbose(invocation, &configuration.rustc_program)?;
     Ok(CargoContext {
         workspace_root,
         cargo_version: version,
         toolchain_description: format!(
-            "{cargo_verbose}\n--- rustc: {rustc_program} ---\n{rustc_verbose}\n--- cargo config ---\n{configuration}"
+            "{cargo_verbose}\n--- rustc: {rustc_program} ---\n{rustc_verbose}\n--- cargo config ---\n{}",
+            configuration.fingerprint
         ),
     })
 }
@@ -58,21 +62,23 @@ fn cargo_verbose(invocation: &CargoInvocation, prefix: &[String]) -> Result<Stri
     )
 }
 
-fn rustc_verbose(invocation: &CargoInvocation) -> Result<(String, String), StoreError> {
+fn rustc_verbose(
+    invocation: &CargoInvocation,
+    program: &str,
+) -> Result<(String, String), StoreError> {
     let arguments = vec!["-vV".to_owned()];
     let environment = invocation
         .toolchain_override()
         .map(|toolchain| ("RUSTUP_TOOLCHAIN", toolchain));
-    let program = super::config_identity::effective_rustc(invocation)?;
     let directory = invocation.effective_working_directory()?;
     let verbose = process::required_output(
         "Rust compiler identity query",
-        &program,
+        program,
         &arguments,
         &directory,
         environment,
     )?;
-    Ok((program, verbose))
+    Ok((program.to_owned(), verbose))
 }
 
 fn workspace_root(invocation: &CargoInvocation) -> Result<PathBuf, StoreError> {
