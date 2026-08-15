@@ -44,6 +44,13 @@ def check_required_files(checks: Checks) -> None:
         "Cargo.toml",
         "README.md",
         "LICENSE",
+        "docs/design.md",
+        "docs/adr/0001-owned-whole-arena-collection.md",
+        "docs/locking.md",
+        "docs/platform-support.md",
+        "docs/release-qualification.md",
+        "docs/safety.md",
+        "docs/store-format.md",
         "scripts/check",
     ]
     for name in required:
