@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+python3 scripts/guardrails.py
+python3 - <<'PY'
+from pathlib import Path
+import tomllib
+
+for path in sorted(Path('.').rglob('*.toml')):
+    with path.open('rb') as source:
+        tomllib.load(source)
+    print(f'toml ok: {path}')
+PY
+
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  git diff --check
+fi
