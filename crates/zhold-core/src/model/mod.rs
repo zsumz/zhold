@@ -13,7 +13,7 @@ mod quota;
 mod quota_test;
 mod worktree;
 
-pub use arena::{ArenaRecord, ArenaState, BuildOutcome};
+pub use arena::{ArenaRecord, ArenaState, BuildOutcome, SizeQuality};
 pub use collection::{CollectionPlan, CollectionPolicy, Eviction, EvictionReason};
 pub use command::{CargoCommandClass, CommandDescriptor};
 pub use history::{HistoryKind, HistoryPolicy, ParseHistoryKindError};

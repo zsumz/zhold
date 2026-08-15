@@ -3,7 +3,7 @@ use std::fs;
 use tempfile::tempdir;
 use zhold_core::{BuildOutcome, ByteSize, CollectionPolicy};
 
-use crate::{CargoInvocation, Store, test_support};
+use crate::{CargoInvocation, Store, StoreError, test_support};
 
 #[test]
 fn lease_is_authoritative_for_inventory_and_collection() -> Result<(), Box<dyn std::error::Error>> {
@@ -82,5 +82,50 @@ fn raw_cargo_arguments_are_never_persisted_or_exposed() -> Result<(), Box<dyn st
     assert!(!inventory.contains(secret));
     assert!(manifest.contains("arguments_fingerprint"));
     assert!(inventory.contains("arguments_fingerprint"));
+    Ok(())
+}
+
+#[test]
+fn unreadable_owned_metadata_blocks_collection() -> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let project = tempdir()?;
+    let store = Store::open(temporary.path())?;
+    let (context, _invocation) = test_support::create_idle_arena(&store, project.path(), 4_096)?;
+    fs::write(store.layout.manifest(context.arena_id()), b"corrupt")?;
+
+    let inventory = store.inventory()?;
+    assert_eq!(inventory.uncertain_owned, 1);
+    assert_eq!(inventory.arenas.len(), 0);
+    assert!(matches!(
+        store.collect(CollectionPolicy::new(ByteSize::from_bytes(1)), false),
+        Err(StoreError::InventoryUncertain { count: 1 })
+    ));
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn active_reservation_survives_build_directory_measurement_failure()
+-> Result<(), Box<dyn std::error::Error>> {
+    use std::os::unix::fs::symlink;
+
+    let temporary = tempdir()?;
+    let project = tempdir()?;
+    let outside = tempdir()?;
+    let store = Store::open(temporary.path())?;
+    let context = test_support::context(project.path())?;
+    let invocation = test_support::invocation(project.path())?;
+    let reservation = ByteSize::from_bytes(8_192);
+    let lease = store.lease_reserved(&context, &invocation, reservation)?;
+    let build = lease.build_dir().to_path_buf();
+    let moved = outside.path().join("build");
+    fs::rename(&build, &moved)?;
+    symlink(&moved, &build)?;
+
+    let inventory = store.inventory()?;
+
+    assert_eq!(inventory.uncertain_owned, 1);
+    assert_eq!(inventory.reserved, reservation);
+    drop(lease);
     Ok(())
 }

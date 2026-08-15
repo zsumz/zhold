@@ -176,6 +176,7 @@ fn record(spec: RecordSpec<'_>) -> ArenaRecord {
         worktree_root: PathBuf::from(spec.key),
         build_dir: PathBuf::from(spec.key).join("build"),
         size: ByteSize::from_bytes(spec.bytes),
+        size_quality: crate::SizeQuality::Fresh,
         created_at: 1,
         last_used_at: spec.last_used_at,
         active: spec.active,
@@ -183,4 +184,23 @@ fn record(spec: RecordSpec<'_>) -> ArenaRecord {
         worktree_exists: spec.worktree_exists,
         last_outcome: spec.last_outcome,
     }
+}
+
+#[test]
+fn uncertain_sizes_are_protected_and_fail_admission_closed()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut stale = record(RecordSpec::idle("stale", 30, 1));
+    stale.size_quality = crate::SizeQuality::Stale;
+    let plan = plan_collection(
+        &[stale],
+        CollectionPolicy {
+            budget: ByteSize::from_bytes(100),
+            low_watermark_percent: 80,
+        },
+    )?;
+
+    assert!(plan.evictions.is_empty());
+    assert_eq!(plan.protected, ByteSize::from_bytes(30));
+    assert!(!plan.budget_met);
+    Ok(())
 }

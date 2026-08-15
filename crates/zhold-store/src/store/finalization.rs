@@ -30,7 +30,7 @@ impl Store {
         let finished_seconds = unix_seconds()?;
         let finished_at = unix_milliseconds()?;
         let reservation = manifest.reservation;
-        manifest.finish(outcome, peak, finished_seconds);
+        manifest.finish(outcome, peak, final_bytes, finished_seconds);
         write_json(&manifest_path, &manifest)?;
         Ok(HistoryDraft::build(
             BuildReceipt {

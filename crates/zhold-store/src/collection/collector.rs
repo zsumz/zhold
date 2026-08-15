@@ -27,6 +27,11 @@ pub(crate) fn collect_locked(
     dry_run: bool,
 ) -> Result<CollectionReport, StoreError> {
     let inventory = store.inventory()?;
+    if inventory.uncertain_owned > 0 {
+        return Err(StoreError::InventoryUncertain {
+            count: inventory.uncertain_owned,
+        });
+    }
     let records = inventory
         .arenas
         .iter()

@@ -17,6 +17,12 @@ pub(crate) fn inventory(inventory: &Inventory, format: OutputFormat) -> Result<(
     writeln!(output, "managed    {}", inventory.total).map_err(output_error)?;
     writeln!(output, "protected  {}", inventory.protected).map_err(output_error)?;
     writeln!(output, "reserved   {}", inventory.reserved).map_err(output_error)?;
+    writeln!(
+        output,
+        "uncertain  {} owned arenas",
+        inventory.uncertain_owned
+    )
+    .map_err(output_error)?;
     writeln!(output, "trash      {}", inventory.trash).map_err(output_error)?;
     writeln!(output, "physical   {}", inventory.physical).map_err(output_error)?;
     writeln!(output, "available  {}", inventory.available).map_err(output_error)?;

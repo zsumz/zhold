@@ -22,6 +22,8 @@ pub struct Inventory {
     pub protected: ByteSize,
     /// Additional growth headroom declared by live build leases.
     pub reserved: ByteSize,
+    /// Plausibly owned arenas whose current accounting could not be proven.
+    pub uncertain_owned: u64,
     /// Measured bytes in retired arenas awaiting deletion.
     pub trash: ByteSize,
     /// Measured bytes beneath the complete marked store root.

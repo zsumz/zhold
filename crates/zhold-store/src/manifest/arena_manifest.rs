@@ -9,7 +9,7 @@ use zhold_core::{
 
 use crate::{BuildContext, StoreError};
 
-pub(crate) const ARENA_SCHEMA_VERSION: u32 = 3;
+pub(crate) const ARENA_SCHEMA_VERSION: u32 = 4;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(crate) struct ArenaManifest {
@@ -45,6 +45,8 @@ pub(crate) struct ArenaManifest {
     #[serde(default)]
     pub(crate) last_peak: ByteSize,
     #[serde(default)]
+    pub(crate) last_known_size: ByteSize,
+    #[serde(default)]
     pub(crate) retirement_id: Option<Uuid>,
 }
 
@@ -77,6 +79,7 @@ impl ArenaManifest {
             pin_expires_at: None,
             reservation: ByteSize::ZERO,
             last_peak: ByteSize::ZERO,
+            last_known_size: ByteSize::ZERO,
             retirement_id: None,
         }
     }
@@ -177,7 +180,13 @@ impl ArenaManifest {
         self.retirement_id = None;
     }
 
-    pub(crate) fn finish(&mut self, outcome: BuildOutcome, peak: ByteSize, now: u64) {
+    pub(crate) fn finish(
+        &mut self,
+        outcome: BuildOutcome,
+        peak: ByteSize,
+        final_bytes: ByteSize,
+        now: u64,
+    ) {
         self.schema_version = ARENA_SCHEMA_VERSION;
         self.revision = self.revision.saturating_add(1);
         self.last_used_at = now;
@@ -185,6 +194,7 @@ impl ArenaManifest {
         self.last_outcome = Some(outcome);
         self.reservation = ByteSize::ZERO;
         self.last_peak = peak;
+        self.last_known_size = final_bytes;
     }
 
     pub(crate) fn set_pin(&mut self, pinned: bool, expires_at: Option<u64>) {

@@ -2,6 +2,7 @@
 
 mod model;
 mod reader;
+mod uncertainty;
 
 #[cfg(test)]
 mod reader_test;

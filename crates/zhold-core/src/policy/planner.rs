@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::{
     ArenaRecord, ArenaState, BuildOutcome, ByteSize, CollectionPlan, CollectionPolicy, Eviction,
-    EvictionReason,
+    EvictionReason, SizeQuality,
 };
 
 /// Invalid collection policy.
@@ -36,9 +36,15 @@ pub fn plan_collection_with_reservation(
     let before = records.iter().fold(ByteSize::ZERO, |total, record| {
         total.saturating_add(record.size)
     });
+    let uncertain = records
+        .iter()
+        .any(|record| record.size_quality != SizeQuality::Fresh);
     let protected = records
         .iter()
-        .filter(|record| matches!(record.state(), ArenaState::Active | ArenaState::Pinned))
+        .filter(|record| {
+            matches!(record.state(), ArenaState::Active | ArenaState::Pinned)
+                || record.size_quality != SizeQuality::Fresh
+        })
         .fold(ByteSize::ZERO, |total, record| {
             total.saturating_add(record.size)
         });
@@ -56,13 +62,16 @@ pub fn plan_collection_with_reservation(
             protected,
             reclaimable: ByteSize::ZERO,
             evictions: Vec::new(),
-            budget_met: true,
+            budget_met: !uncertain,
         });
     }
 
     let mut candidates = records
         .iter()
-        .filter(|record| matches!(record.state(), ArenaState::Orphaned | ArenaState::Idle))
+        .filter(|record| {
+            record.size_quality == SizeQuality::Fresh
+                && matches!(record.state(), ArenaState::Orphaned | ArenaState::Idle)
+        })
         .collect::<Vec<_>>();
     candidates.sort_by_key(|record| {
         (
@@ -95,7 +104,7 @@ pub fn plan_collection_with_reservation(
         protected,
         reclaimable: before.saturating_sub(projected),
         evictions,
-        budget_met: projected <= admission_budget,
+        budget_met: !uncertain && projected <= admission_budget,
     })
 }
 

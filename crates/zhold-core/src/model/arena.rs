@@ -30,6 +30,19 @@ pub enum ArenaState {
     Idle,
 }
 
+/// Confidence in the byte count attached to an arena observation.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SizeQuality {
+    /// The arena tree was measured successfully in this snapshot.
+    #[default]
+    Fresh,
+    /// Current measurement failed, so the last durable successful size is used.
+    Stale,
+    /// No trustworthy byte count is available.
+    Unknown,
+}
+
 /// Complete policy input for one managed arena.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ArenaRecord {
@@ -49,6 +62,8 @@ pub struct ArenaRecord {
     pub build_dir: PathBuf,
     /// Measured bytes beneath the arena.
     pub size: ByteSize,
+    /// Confidence in `size` for admission and collection decisions.
+    pub size_quality: SizeQuality,
     /// Creation time as Unix seconds.
     pub created_at: u64,
     /// Most recent managed use as Unix seconds.

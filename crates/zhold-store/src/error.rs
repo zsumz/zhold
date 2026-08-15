@@ -106,6 +106,12 @@ pub enum StoreError {
     /// An adopted quota could not safely admit a managed build.
     #[error("quota admission is blocked: {0}")]
     QuotaAdmissionBlocked(String),
+    /// Plausibly owned bytes could not be accounted conservatively.
+    #[error("admission is blocked because {count} owned arena entries have uncertain accounting")]
+    InventoryUncertain {
+        /// Number of plausible owned entries requiring attention.
+        count: u64,
+    },
     /// A collection policy was invalid.
     #[error(transparent)]
     Policy(#[from] PolicyError),
