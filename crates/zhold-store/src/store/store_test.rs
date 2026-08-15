@@ -1,4 +1,4 @@
-use std::{fs, io, thread, time::Duration};
+use std::{fs, io};
 
 use tempfile::tempdir;
 use zhold_core::{ArenaState, BuildOutcome};
@@ -34,26 +34,34 @@ fn refuses_to_claim_a_non_empty_unmarked_directory() -> Result<(), Box<dyn std::
 }
 
 #[test]
-fn concurrent_marker_publication_is_waited_out() -> Result<(), Box<dyn std::error::Error>> {
+fn concurrent_store_initializers_serialize_marker_publication()
+-> Result<(), Box<dyn std::error::Error>> {
     let temporary = tempdir()?;
-    let marker = StoreMarker::create();
+    let root = temporary.path().to_path_buf();
+    let contender = root.clone();
+    let opener = std::thread::spawn(move || Store::open(contender));
+    let store = Store::open(root)?;
+    let concurrent = opener
+        .join()
+        .map_err(|_| io::Error::other("concurrent initializer thread failed"))??;
+
+    assert_eq!(store.info().store_id, concurrent.info().store_id);
+    Ok(())
+}
+
+#[test]
+fn abandoned_store_marker_staging_is_recovered() -> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
     let staging = temporary
         .path()
         .join(format!("store.json.{}.new", uuid::Uuid::new_v4()));
-    let published = temporary.path().join("store.json");
-    fs::write(&staging, serde_json::to_vec_pretty(&marker)?)?;
-    let publisher = thread::spawn(move || {
-        thread::sleep(Duration::from_millis(20));
-        fs::hard_link(&staging, &published)?;
-        fs::remove_file(staging)
-    });
+    fs::write(&staging, serde_json::to_vec_pretty(&StoreMarker::create())?)?;
 
     let store = Store::open(temporary.path())?;
-    publisher
-        .join()
-        .map_err(|_| io::Error::other("marker publisher thread failed"))??;
 
-    assert_eq!(store.info().store_id, marker.store_id);
+    assert!(store.info().root.join("store.json").is_file());
+    assert!(!staging.exists());
+    assert!(store.info().root.join("store.initialize.lock").is_file());
     Ok(())
 }
 

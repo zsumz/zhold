@@ -17,6 +17,17 @@ pub enum StoreError {
         #[source]
         source: Box<io::Error>,
     },
+    /// The store filesystem lacks a primitive required for crash-safe metadata publication.
+    #[error("filesystem at `{path}` lacks required {capability} support: {source}")]
+    FilesystemCapability {
+        /// Store root whose filesystem was probed.
+        path: PathBuf,
+        /// Required filesystem behavior.
+        capability: &'static str,
+        /// Underlying filesystem failure.
+        #[source]
+        source: Box<io::Error>,
+    },
     /// Persisted JSON could not be decoded or encoded.
     #[error("invalid zhold metadata at `{path}`: {source}")]
     Json {

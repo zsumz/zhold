@@ -23,3 +23,7 @@ cross-compilation alone is not sufficient evidence.
 
 Cargo 1.91 or newer is required for the stable separate build-directory feature.
 The pinned minimum supported Rust toolchain is 1.91.1.
+
+The store filesystem must support atomic same-filesystem rename, advisory file
+locks, and same-directory hard links. Store opening probes hard-link publication
+and fails with an explicit capability error before managed metadata is written.
