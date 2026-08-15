@@ -26,6 +26,7 @@ fn managed_cargo_preserves_the_existing_rustc_wrapper() -> Result<(), Box<dyn st
     let output = Command::new(env!("CARGO_BIN_EXE_zhold"))
         .arg("--store")
         .arg(&store)
+        .args(["--budget", "100GiB"])
         .args(["cargo", "check"])
         .env("RUSTC_WRAPPER", &wrapper)
         .env("ZHOLD_TEST_WRAPPER_LOG", &log)
@@ -95,6 +96,7 @@ fn zhold(project: &Path, store: &Path) -> Command {
     command
         .arg("--store")
         .arg(store)
+        .args(["--budget", "100GiB"])
         .args(["cargo", "check"])
         .current_dir(project);
     command

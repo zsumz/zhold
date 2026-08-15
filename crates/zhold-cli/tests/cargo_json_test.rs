@@ -23,7 +23,7 @@ fn cargo_json_events_are_filterable_from_shared_stderr() -> Result<(), Box<dyn s
     let output = Command::new(env!("CARGO_BIN_EXE_zhold"))
         .arg("--store")
         .arg(&store)
-        .args(["--format", "json", "cargo", "check"])
+        .args(["--format", "json", "--budget", "100GiB", "cargo", "check"])
         .current_dir(&project)
         .output()?;
 
@@ -39,10 +39,11 @@ fn cargo_json_events_are_filterable_from_shared_stderr() -> Result<(), Box<dyn s
         .map(serde_json::from_str::<serde_json::Value>)
         .collect::<Result<Vec<_>, _>>()?;
 
-    assert_eq!(events.len(), 2);
+    assert_eq!(events.len(), 3);
     assert_eq!(events[0]["event"], "cargo_started");
     assert_eq!(events[1]["event"], "cargo_finished");
     assert_eq!(events[1]["exit_code"], 0);
+    assert_eq!(events[2]["event"], "post_build_collection");
     Ok(())
 }
 
@@ -57,7 +58,7 @@ fn finalization_failure_after_cargo_success_is_a_management_error()
     let output = Command::new(env!("CARGO_BIN_EXE_zhold"))
         .arg("--store")
         .arg(&store)
-        .args(["--format", "json", "cargo", "check"])
+        .args(["--format", "json", "--budget", "100GiB", "cargo", "check"])
         .current_dir(&project)
         .output()?;
 

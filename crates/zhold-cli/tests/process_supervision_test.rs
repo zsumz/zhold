@@ -160,6 +160,7 @@ fn zhold_command(project: &Path, store: &Path) -> Command {
     command
         .arg("--store")
         .arg(store)
+        .args(["--budget", "100GiB"])
         .args(["cargo", "check"])
         .current_dir(project)
         .stdout(Stdio::null())

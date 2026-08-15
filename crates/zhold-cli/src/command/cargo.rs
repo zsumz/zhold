@@ -35,7 +35,7 @@ pub(crate) struct CargoReport {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct CargoLimits {
-    pub(crate) budget: Option<ByteSize>,
+    pub(crate) budget: ByteSize,
     pub(crate) min_free: Option<ByteSize>,
     pub(crate) build_reserve: Option<ByteSize>,
     pub(crate) max_arena_size: Option<ByteSize>,
@@ -67,9 +67,9 @@ fn launch_sentinel(
         .arg(store.info().root)
         .arg("--format")
         .arg(format_name(format));
-    if let Some(budget) = limits.budget {
-        command.arg("--budget").arg(budget.as_u64().to_string());
-    }
+    command
+        .arg("--budget")
+        .arg(limits.budget.as_u64().to_string());
     append_limit(&mut command, "--min-free", limits.min_free);
     append_limit(&mut command, "--build-reserve", limits.build_reserve);
     append_limit(&mut command, "--max-arena-size", limits.max_arena_size);
@@ -97,28 +97,24 @@ fn execute_managed(
     let context = ContextResolver::resolve(&invocation)?;
     let minimum_reservation = limits.build_reserve.unwrap_or(DEFAULT_BUILD_RESERVATION);
     let reservation = store.recommended_reservation(&invocation, minimum_reservation)?;
-    let lease = if let Some(budget) = limits.budget {
-        let (lease, collection) = store.lease_reserved_and_collect(
-            &context,
-            &invocation,
-            reservation,
-            CollectionPolicy::new(budget),
-        )?;
-        render::preflight(&collection, format)?;
-        if !collection.budget_met {
-            let after = collection.after;
-            let reserved = collection.reserved;
-            finish_before_error(lease, format)?;
-            return Err(CliError::BudgetUnmet {
-                after,
-                reserved,
-                budget,
-            });
-        }
-        lease
-    } else {
-        store.lease_reserved(&context, &invocation, reservation)?
-    };
+    let budget = limits.budget;
+    let (lease, collection) = store.lease_reserved_and_collect(
+        &context,
+        &invocation,
+        reservation,
+        CollectionPolicy::new(budget),
+    )?;
+    render::preflight(&collection, format)?;
+    if !collection.budget_met {
+        let after = collection.after;
+        let reserved = collection.reserved;
+        finish_before_error(lease, format)?;
+        return Err(CliError::BudgetUnmet {
+            after,
+            reserved,
+            budget,
+        });
+    }
     if let Some(minimum) = limits.min_free {
         let available = store.available_space()?;
         if available < minimum {

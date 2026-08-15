@@ -14,6 +14,9 @@ pub enum CliError {
     /// Collection was requested without a configured budget.
     #[error("gc requires a budget, for example `zhold gc 200GiB` or ZHOLD_BUDGET=200GiB")]
     MissingBudget,
+    /// Managed Cargo requires an explicit or persisted governance budget.
+    #[error("managed Cargo requires a budget; run `zhold setup 200GiB` first")]
+    MissingCargoBudget,
     /// The caller already selected a Cargo intermediate directory.
     #[error("CARGO_BUILD_BUILD_DIR is already set; refusing to replace the caller's build store")]
     ConflictingBuildDirectory,

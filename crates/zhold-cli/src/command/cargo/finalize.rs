@@ -39,12 +39,9 @@ pub(super) fn execute(
 fn collect_after_build(
     store: &Store,
     report: &CargoReport,
-    budget: Option<zhold_core::ByteSize>,
+    budget: zhold_core::ByteSize,
     format: OutputFormat,
 ) -> Result<ExitStatus, CliError> {
-    let Some(budget) = budget else {
-        return Ok(ExitStatus::child(report.exit_code));
-    };
     match store.collect_post_build(CollectionPolicy::new(budget)) {
         Ok(collection) => {
             render::post_build(&collection, format)?;

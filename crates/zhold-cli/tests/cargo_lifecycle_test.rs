@@ -213,6 +213,7 @@ fn zhold_command(project: &Path, store: &Path, arguments: &[&str]) -> Command {
     command
         .arg("--store")
         .arg(store)
+        .args(["--budget", "100GiB"])
         .args(arguments)
         .current_dir(project);
     command

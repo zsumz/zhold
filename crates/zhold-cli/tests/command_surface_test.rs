@@ -94,6 +94,21 @@ fn garbage_collection_without_any_budget_fails_helpfully() -> Result<(), Box<dyn
 }
 
 #[test]
+fn managed_cargo_without_any_budget_requires_setup() -> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let store = temporary.path().join("store");
+
+    let output = command(&store, temporary.path(), &["cargo", "check"])
+        .env_remove("ZHOLD_BUDGET")
+        .output()?;
+
+    assert_eq!(output.status.code(), Some(1));
+    assert!(String::from_utf8(output.stderr)?.contains("zhold setup 200GiB"));
+    assert!(Store::open(&store)?.inventory()?.arenas.is_empty());
+    Ok(())
+}
+
+#[test]
 fn status_json_is_one_parseable_document() -> Result<(), Box<dyn std::error::Error>> {
     let temporary = tempdir()?;
     let store = temporary.path().join("store");

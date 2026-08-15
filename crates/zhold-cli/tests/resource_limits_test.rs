@@ -20,7 +20,14 @@ fn minimum_free_space_blocks_cargo_before_spawn() -> Result<(), Box<dyn std::err
     create_project(&project)?;
 
     let output = zhold(&project, &store)
-        .args(["--min-free", "18446744073709551615", "cargo", "check"])
+        .args([
+            "--budget",
+            "100GiB",
+            "--min-free",
+            "18446744073709551615",
+            "cargo",
+            "check",
+        ])
         .output()?;
 
     assert_eq!(output.status.code(), Some(1));
@@ -113,6 +120,8 @@ fn arena_size_threshold_warns_and_records_peak_without_killing_cargo()
         .args([
             "--format",
             "json",
+            "--budget",
+            "100GiB",
             "--max-arena-size",
             "1B",
             "cargo",

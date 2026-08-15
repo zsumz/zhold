@@ -11,6 +11,17 @@ pub(crate) fn execute(cli: Cli) -> Result<ExitStatus, CliError> {
         Some(path) => path,
         None => Store::default_root()?,
     };
+    if cli.budget.is_none() && !root.exists() {
+        match &command {
+            Command::Cargo { .. } => return Err(CliError::MissingCargoBudget),
+            Command::Gc {
+                size: None,
+                trash_only: false,
+                ..
+            } => return Err(CliError::MissingBudget),
+            _ => {}
+        }
+    }
     let store = Store::open(root)?;
     if let Command::Setup {
         budget,
@@ -34,7 +45,7 @@ pub(crate) fn execute(cli: Cli) -> Result<ExitStatus, CliError> {
             &store,
             arguments,
             super::CargoLimits {
-                budget,
+                budget: budget.ok_or(CliError::MissingCargoBudget)?,
                 min_free: cli.min_free.or(config.min_filesystem_free),
                 build_reserve: cli.build_reserve.or(config.minimum_build_reservation),
                 max_arena_size: cli.max_arena_size,
