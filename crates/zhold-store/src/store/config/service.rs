@@ -1,0 +1,78 @@
+use std::{fs, io};
+
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+use zhold_core::ByteSize;
+
+use super::StoreConfig;
+use crate::{
+    Store, StoreError,
+    io::{create_json, read_json, write_json},
+    lock::ExclusiveFileLock,
+};
+
+const SCHEMA_VERSION: u32 = 1;
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct ConfigDocument {
+    schema_version: u32,
+    store_id: Uuid,
+    config: StoreConfig,
+}
+
+impl Store {
+    /// Reads durable store defaults without applying environment overrides.
+    pub fn config(&self) -> Result<StoreConfig, StoreError> {
+        let _lock = ExclusiveFileLock::acquire(&self.layout.config_lock())?;
+        read_config(self)
+    }
+
+    /// Atomically replaces durable store defaults.
+    pub fn set_config(&self, config: StoreConfig) -> Result<(), StoreError> {
+        validate_config(config)?;
+        let _lock = ExclusiveFileLock::acquire(&self.layout.config_lock())?;
+        let document = ConfigDocument {
+            schema_version: SCHEMA_VERSION,
+            store_id: self.marker.store_id,
+            config,
+        };
+        let path = self.layout.config();
+        if path.exists() {
+            write_json(&path, &document)
+        } else if create_json(&path, &document)? {
+            Ok(())
+        } else {
+            write_json(&path, &document)
+        }
+    }
+}
+
+fn read_config(store: &Store) -> Result<StoreConfig, StoreError> {
+    let path = store.layout.config();
+    match fs::symlink_metadata(&path) {
+        Ok(_) => {
+            let document: ConfigDocument = read_json(&path)?;
+            if document.schema_version != SCHEMA_VERSION
+                || document.store_id != store.marker.store_id
+            {
+                return Err(StoreError::InvalidConfiguration(
+                    "document schema or store identity does not match".to_owned(),
+                ));
+            }
+            validate_config(document.config)?;
+            Ok(document.config)
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(StoreConfig::default()),
+        Err(error) => Err(StoreError::io("inspect store configuration", path, error)),
+    }
+}
+
+fn validate_config(config: StoreConfig) -> Result<(), StoreError> {
+    if config.arena_budget == Some(ByteSize::ZERO) {
+        return Err(StoreError::InvalidConfiguration(
+            "arena budget must be greater than zero".to_owned(),
+        ));
+    }
+    Ok(())
+}

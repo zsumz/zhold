@@ -39,7 +39,7 @@ pub use quota::{
     QuotaAction, QuotaAdoption, QuotaExpectation, QuotaObservation, QuotaPlan, QuotaStatus,
 };
 pub use scan::{ForeignTarget, ScanReport};
-pub use store::{ArenaLease, DoctorReport, Store, StoreInfo};
+pub use store::{ArenaLease, DoctorReport, Store, StoreConfig, StoreInfo};
 pub use worktree::{
     HookMetadata, HookReport, WorktreeFinding, WorktreeIntegration, WorktreeSummary,
 };

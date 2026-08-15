@@ -2,6 +2,7 @@
 
 mod arena_lease;
 mod collection;
+mod config;
 mod doctor;
 mod finalization;
 mod history;
@@ -16,5 +17,6 @@ mod service_test;
 mod store_test;
 
 pub use arena_lease::ArenaLease;
+pub use config::StoreConfig;
 pub use doctor::DoctorReport;
 pub use service::{Store, StoreInfo};

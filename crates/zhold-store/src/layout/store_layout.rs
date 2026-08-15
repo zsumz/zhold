@@ -21,6 +21,14 @@ impl StoreLayout {
         self.root.join("store.json")
     }
 
+    pub(crate) fn config(&self) -> PathBuf {
+        self.root.join("config.json")
+    }
+
+    pub(crate) fn config_lock(&self) -> PathBuf {
+        self.locks().join("config.lock")
+    }
+
     pub(crate) fn arenas(&self) -> PathBuf {
         self.root.join("arenas")
     }

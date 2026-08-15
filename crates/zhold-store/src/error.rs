@@ -115,6 +115,9 @@ pub enum StoreError {
     /// The bounded reservation estimate is corrupt or belongs to another store.
     #[error("reservation profile is invalid or belongs to another store")]
     InvalidReservationProfile,
+    /// Persisted or requested store configuration violated its schema.
+    #[error("invalid store configuration: {0}")]
+    InvalidConfiguration(String),
     /// A collection policy was invalid.
     #[error(transparent)]
     Policy(#[from] PolicyError),
