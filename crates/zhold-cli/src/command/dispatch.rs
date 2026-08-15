@@ -1,0 +1,82 @@
+use zhold_store::Store;
+
+use crate::{
+    CliError,
+    app::{Cli, Command, ExitStatus},
+};
+
+pub(crate) fn execute(cli: Cli) -> Result<ExitStatus, CliError> {
+    let command = cli.command.unwrap_or(Command::Status);
+    let gc_budget = match &command {
+        Command::Gc {
+            size, trash_only, ..
+        } if !trash_only => Some(size.or(cli.budget).ok_or(CliError::MissingBudget)?),
+        _ => None,
+    };
+    let root = match cli.store {
+        Some(path) => path,
+        None => Store::default_root()?,
+    };
+    let store = Store::open(root)?;
+    match command {
+        Command::Cargo { arguments } => super::cargo::execute(
+            &store,
+            arguments,
+            super::CargoLimits {
+                budget: cli.budget,
+                min_free: cli.min_free,
+                build_reserve: cli.build_reserve,
+                max_arena_size: cli.max_arena_size,
+            },
+            cli.format,
+        ),
+        Command::Scan { paths } => super::scan::execute(&store, paths, cli.format),
+        Command::Status => super::status::execute(&store, cli.format),
+        Command::Gc {
+            size: _,
+            low_watermark,
+            dry_run,
+            trash_only,
+        } => super::collect::execute(
+            &store,
+            super::collect::GcOptions {
+                budget: gc_budget,
+                low_watermark,
+                dry_run,
+                trash_only,
+            },
+            cli.format,
+        ),
+        Command::Pin { arena, duration } => super::pin::execute(
+            &store,
+            &arena,
+            true,
+            duration.map(crate::app::PinDuration::as_seconds),
+            cli.format,
+        ),
+        Command::Unpin { arena } => super::pin::execute(&store, &arena, false, None, cli.format),
+        Command::Doctor => super::doctor::execute(&store, cli.format),
+        Command::Explain { arena } => super::explain::execute(&store, &arena, cli.format),
+        Command::History {
+            kind,
+            arena,
+            worktree,
+            since,
+            limit,
+            action,
+        } => super::history::execute(
+            &store,
+            super::history::HistoryOptions {
+                kind,
+                arena,
+                worktree,
+                since_seconds: since.map(crate::app::PinDuration::as_seconds),
+                limit,
+                action,
+            },
+            cli.format,
+        ),
+        Command::Hook { action } => super::hook::execute(&store, action, cli.format),
+        Command::Quota { action } => super::quota::execute(&store, &action, cli.budget, cli.format),
+    }
+}
