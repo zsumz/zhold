@@ -140,6 +140,29 @@ fn a_partially_deleted_retirement_keeps_external_retry_authority()
     Ok(())
 }
 
+#[cfg(unix)]
+#[test]
+fn an_unmeasurable_trash_tree_fails_closed_instead_of_counting_zero()
+-> Result<(), Box<dyn std::error::Error>> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let store_root = tempdir()?;
+    let project = tempdir()?;
+    let store = Store::open(store_root.path())?;
+    let (context, _) = create_idle_arena(&store, project.path(), 4_096)?;
+    let retired = retire_for_test(&store, &context)?;
+    let blocked = retired.join("blocked");
+    fs::create_dir(&blocked)?;
+    fs::set_permissions(&blocked, fs::Permissions::from_mode(0o000))?;
+
+    let result = store.retry_trash(false);
+
+    fs::set_permissions(&blocked, fs::Permissions::from_mode(0o700))?;
+    assert!(result.is_err());
+    assert!(retired.is_dir());
+    Ok(())
+}
+
 fn retire_for_test(
     store: &Store,
     context: &BuildContext,
