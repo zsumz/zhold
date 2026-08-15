@@ -30,6 +30,23 @@ fn read_only_open_does_not_create_or_repair_store_state() -> Result<(), Box<dyn 
 }
 
 #[test]
+fn read_only_inventory_never_creates_a_missing_lock_file() -> Result<(), Box<dyn std::error::Error>>
+{
+    let store_root = tempdir()?;
+    let project = tempdir()?;
+    let store = Store::open_read_write(store_root.path())?;
+    let (context, _) = test_support::create_idle_arena(&store, project.path(), 4_096)?;
+    let lock = store.layout.arena_lock(context.arena_id());
+    std::fs::remove_file(&lock)?;
+    drop(store);
+
+    let store = Store::open_read_only(store_root.path())?;
+    assert_eq!(store.inventory_cached()?.arenas.len(), 1);
+    assert!(!lock.exists());
+    Ok(())
+}
+
+#[test]
 fn contended_admission_does_not_hold_the_collection_lock() -> Result<(), Box<dyn std::error::Error>>
 {
     let store_root = tempdir()?;

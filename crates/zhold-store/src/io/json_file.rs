@@ -12,7 +12,7 @@ use crate::{
     io::{
         configure_private_file,
         json_publish::{JsonPublication, replace_with_backup, sync_metadata_directory},
-        secure_file, secure_open_file,
+        secure_file, secure_open_file, verify_file,
     },
 };
 
@@ -233,7 +233,7 @@ pub(super) fn is_real_file(path: &Path) -> Result<bool, StoreError> {
             })
         }
         Ok(_) => {
-            secure_file(path)?;
+            verify_file(path)?;
             Ok(true)
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),

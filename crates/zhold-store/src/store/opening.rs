@@ -20,7 +20,11 @@ impl Store {
         let root = inspect_store_root(root.as_ref())?;
         let layout = StoreLayout::new(root);
         let marker = open_marker_read_only(&layout)?;
-        Ok(Self { layout, marker })
+        Ok(Self {
+            layout,
+            marker,
+            read_only: true,
+        })
     }
 
     /// Opens an existing store for mutation or initializes an empty directory.
@@ -34,6 +38,10 @@ impl Store {
         let marker = open_marker_read_write(&layout)?;
         verify_filesystem_capabilities(layout.root())?;
         ensure_layout(&layout)?;
-        Ok(Self { layout, marker })
+        Ok(Self {
+            layout,
+            marker,
+            read_only: false,
+        })
     }
 }

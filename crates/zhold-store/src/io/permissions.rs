@@ -40,9 +40,27 @@ pub(crate) fn secure_file(path: &Path) -> Result<(), StoreError> {
     secure_open_file(&file, path)
 }
 
+#[cfg(unix)]
+pub(crate) fn verify_file(path: &Path) -> Result<(), StoreError> {
+    use std::os::unix::fs::OpenOptionsExt;
+
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(path)
+        .map_err(|error| StoreError::io("open private metadata", path, error))?;
+    verify_open_file(&file, path)
+}
+
 #[cfg(not(unix))]
 #[allow(clippy::unnecessary_wraps)]
 pub(crate) fn secure_file(_path: &Path) -> Result<(), StoreError> {
+    Ok(())
+}
+
+#[cfg(not(unix))]
+#[allow(clippy::unnecessary_wraps)]
+pub(crate) fn verify_file(_path: &Path) -> Result<(), StoreError> {
     Ok(())
 }
 
@@ -67,9 +85,39 @@ pub(crate) fn secure_open_file(file: &fs::File, path: &Path) -> Result<(), Store
     Ok(())
 }
 
+#[cfg(unix)]
+pub(crate) fn verify_open_file(file: &fs::File, path: &Path) -> Result<(), StoreError> {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+    let metadata = file
+        .metadata()
+        .map_err(|error| StoreError::io("inspect private file", path, error))?;
+    if !metadata.is_file() {
+        return Err(StoreError::InvalidOwnership {
+            path: path.to_path_buf(),
+            reason: "private metadata path is not a real file".to_owned(),
+        });
+    }
+    verify_owner(path, metadata.uid())?;
+    if metadata.permissions().mode() & 0o777 == 0o600 {
+        Ok(())
+    } else {
+        Err(StoreError::InvalidOwnership {
+            path: path.to_path_buf(),
+            reason: "private metadata permissions are not 0600".to_owned(),
+        })
+    }
+}
+
 #[cfg(not(unix))]
 #[allow(clippy::unnecessary_wraps)]
 pub(crate) fn secure_open_file(_file: &fs::File, _path: &Path) -> Result<(), StoreError> {
+    Ok(())
+}
+
+#[cfg(not(unix))]
+#[allow(clippy::unnecessary_wraps)]
+pub(crate) fn verify_open_file(_file: &fs::File, _path: &Path) -> Result<(), StoreError> {
     Ok(())
 }
 

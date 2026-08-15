@@ -8,7 +8,7 @@ use fs2::FileExt;
 
 use crate::{
     StoreError,
-    io::{configure_private_file, secure_open_file},
+    io::{configure_private_file, secure_open_file, verify_open_file},
 };
 
 #[derive(Debug)]
@@ -49,6 +49,29 @@ impl ExclusiveFileLock {
             Some(_lock) => LockState::Available,
             None => LockState::Held,
         })
+    }
+
+    pub(crate) fn probe_read_only(path: &Path) -> Result<LockState, StoreError> {
+        validate_lock_parent(path)?;
+        match fs::symlink_metadata(path) {
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(LockState::Available),
+            Err(error) => Err(StoreError::io("inspect lock", path, error)),
+            Ok(_) => {
+                validate_lock_path(path)?;
+                let mut options = OpenOptions::new();
+                options.read(true);
+                configure_no_follow(&mut options);
+                let file = options
+                    .open(path)
+                    .map_err(|error| StoreError::io("open lock read-only", path, error))?;
+                verify_open_file(&file, path)?;
+                match FileExt::try_lock_exclusive(&file) {
+                    Ok(()) => Ok(LockState::Available),
+                    Err(error) if is_lock_contention(&error) => Ok(LockState::Held),
+                    Err(error) => Err(StoreError::io("probe lock read-only", path, error)),
+                }
+            }
+        }
     }
 }
 

@@ -9,7 +9,7 @@ use crate::{
     inventory::ensure_real_contained_directory,
     io::{measure_tree, read_json},
     layout::StoreLayout,
-    lock::{ExclusiveFileLock, LockState},
+    lock::LockState,
     manifest::ArenaManifest,
     time::unix_seconds,
 };
@@ -183,7 +183,7 @@ fn read_entry(
     let build_dir = layout.build_dir(&arena_id);
     ensure_real_contained_directory(&build_dir, canonical_root)?;
     let active = matches!(
-        ExclusiveFileLock::probe(&layout.arena_lock(&arena_id))?,
+        store.probe_lock(&layout.arena_lock(&arena_id))?,
         LockState::Held
     );
     let unfinished = manifest.is_unfinished();

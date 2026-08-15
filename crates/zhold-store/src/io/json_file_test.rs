@@ -154,7 +154,8 @@ fn rejects_a_symlink_metadata_file() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(unix)]
 #[test]
-fn tightens_existing_metadata_permissions() -> Result<(), Box<dyn std::error::Error>> {
+fn reads_never_repair_metadata_permissions_but_writes_do() -> Result<(), Box<dyn std::error::Error>>
+{
     use std::os::unix::fs::PermissionsExt;
 
     let temporary = tempdir()?;
@@ -163,6 +164,12 @@ fn tightens_existing_metadata_permissions() -> Result<(), Box<dyn std::error::Er
     create_json(&path, &stable)?;
     fs::set_permissions(&path, fs::Permissions::from_mode(0o644))?;
 
+    assert!(matches!(
+        read_json::<Document>(&path),
+        Err(StoreError::InvalidOwnership { .. })
+    ));
+    assert_eq!(fs::metadata(&path)?.permissions().mode() & 0o777, 0o644);
+    write_json(&path, &stable)?;
     assert_eq!(read_json::<Document>(&path)?, stable);
     assert_eq!(fs::metadata(path)?.permissions().mode() & 0o777, 0o600);
     Ok(())

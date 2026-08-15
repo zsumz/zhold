@@ -14,6 +14,7 @@ pub(crate) use json_file::{
     create_json, read_json, remove_json, write_json, write_json_commit_aware,
 };
 pub(crate) use permissions::{
-    configure_private_file, secure_directory, secure_file, secure_open_file,
+    configure_private_file, secure_directory, secure_file, secure_open_file, verify_file,
+    verify_open_file,
 };
 pub(crate) use tree::{measure_tree, remove_tree};

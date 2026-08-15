@@ -27,6 +27,7 @@ use crate::{
 pub struct Store {
     pub(crate) layout: StoreLayout,
     pub(crate) marker: StoreMarker,
+    pub(crate) read_only: bool,
 }
 
 /// Stable metadata for an opened store.
@@ -39,6 +40,17 @@ pub struct StoreInfo {
 }
 
 impl Store {
+    pub(crate) fn probe_lock(
+        &self,
+        path: &std::path::Path,
+    ) -> Result<crate::lock::LockState, StoreError> {
+        if self.read_only {
+            ExclusiveFileLock::probe_read_only(path)
+        } else {
+            ExclusiveFileLock::probe(path)
+        }
+    }
+
     /// Derives the platform cache location used when no explicit store is configured.
     pub fn default_root() -> Result<PathBuf, StoreError> {
         if let Some(value) = env::var_os("ZHOLD_HOME") {

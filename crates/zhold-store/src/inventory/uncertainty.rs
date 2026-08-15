@@ -2,13 +2,7 @@ use std::{path::Path, str::FromStr};
 
 use zhold_core::{ArenaId, ByteSize};
 
-use crate::{
-    Store,
-    io::read_json,
-    layout::StoreLayout,
-    lock::{ExclusiveFileLock, LockState},
-    manifest::ArenaManifest,
-};
+use crate::{Store, io::read_json, layout::StoreLayout, lock::LockState, manifest::ArenaManifest};
 
 pub(super) fn indexed_arena_id(layout: &StoreLayout, arena_path: &Path) -> Option<ArenaId> {
     let name = arena_path.file_name()?.to_str()?;
@@ -31,7 +25,7 @@ pub(super) fn recover_active_reservation(store: &Store, arena_path: &Path) -> By
         return ByteSize::ZERO;
     }
     if matches!(
-        ExclusiveFileLock::probe(&store.layout.arena_lock(&arena_id)),
+        store.probe_lock(&store.layout.arena_lock(&arena_id)),
         Ok(LockState::Held)
     ) {
         manifest.reservation
