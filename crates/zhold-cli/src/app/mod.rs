@@ -13,5 +13,7 @@ mod duration_test;
 pub use exit_status::ExitStatus;
 pub use runner::{run, run_from};
 
-pub(crate) use args::{Cli, Command, HistoryCommand, HookCommand, OutputFormat, QuotaCommand};
+pub(crate) use args::{Cli, Command, OutputFormat};
+#[cfg(feature = "experimental")]
+pub(crate) use args::{HistoryCommand, HookCommand, QuotaCommand};
 pub(crate) use duration::PinDuration;

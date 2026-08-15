@@ -5,9 +5,12 @@ mod collect;
 mod dispatch;
 mod doctor;
 mod explain;
+#[cfg(feature = "experimental")]
 mod history;
+#[cfg(feature = "experimental")]
 mod hook;
 mod pin;
+#[cfg(feature = "experimental")]
 mod quota;
 mod scan;
 mod selector;

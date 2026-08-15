@@ -1,10 +1,13 @@
 use std::io::{self, Write};
 
-use zhold_store::{QuotaAdoption, QuotaPlan, QuotaStatus};
+use zhold_store::QuotaStatus;
+#[cfg(feature = "experimental")]
+use zhold_store::{QuotaAdoption, QuotaPlan};
 
 use super::output::output_error;
 use crate::{CliError, app::OutputFormat, render::json};
 
+#[cfg(feature = "experimental")]
 pub(crate) fn status(status: &QuotaStatus, format: OutputFormat) -> Result<(), CliError> {
     if matches!(format, OutputFormat::Json) {
         return json::write(status);
@@ -36,6 +39,7 @@ pub(crate) fn status(status: &QuotaStatus, format: OutputFormat) -> Result<(), C
     writeln!(output, "detail     {}", status.observation.detail).map_err(output_error)
 }
 
+#[cfg(feature = "experimental")]
 pub(crate) fn plan(plan: &QuotaPlan, format: OutputFormat) -> Result<(), CliError> {
     if matches!(format, OutputFormat::Json) {
         return json::write(plan);
@@ -68,6 +72,7 @@ pub(crate) fn plan(plan: &QuotaPlan, format: OutputFormat) -> Result<(), CliErro
     Ok(())
 }
 
+#[cfg(feature = "experimental")]
 pub(crate) fn adoption(result: &QuotaAdoption, format: OutputFormat) -> Result<(), CliError> {
     if matches!(format, OutputFormat::Json) {
         json::write(result)?;

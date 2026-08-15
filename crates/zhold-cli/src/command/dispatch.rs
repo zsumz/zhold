@@ -78,6 +78,7 @@ pub(crate) fn execute(cli: Cli) -> Result<ExitStatus, CliError> {
         Command::Unpin { arena } => super::pin::execute(&store, &arena, false, None, cli.format),
         Command::Doctor => super::doctor::execute(&store, cli.format),
         Command::Explain { arena } => super::explain::execute(&store, &arena, cli.format),
+        #[cfg(feature = "experimental")]
         Command::History {
             kind,
             arena,
@@ -97,7 +98,9 @@ pub(crate) fn execute(cli: Cli) -> Result<ExitStatus, CliError> {
             },
             cli.format,
         ),
+        #[cfg(feature = "experimental")]
         Command::Hook { action } => super::hook::execute(&store, action, cli.format),
+        #[cfg(feature = "experimental")]
         Command::Quota { action } => super::quota::execute(&store, &action, budget, cli.format),
     }
 }

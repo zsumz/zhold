@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use zhold_core::ByteSize;
+#[cfg(feature = "experimental")]
 use zhold_core::{HistoryKind, QuotaProvider, WorktreeId};
 
 use super::PinDuration;
@@ -92,6 +93,7 @@ pub(crate) enum Command {
         arena: String,
     },
     /// Query or configure bounded persistent operation history.
+    #[cfg(feature = "experimental")]
     History {
         /// Restrict receipts to one category.
         #[arg(long)]
@@ -113,12 +115,14 @@ pub(crate) enum Command {
         action: Option<HistoryCommand>,
     },
     /// Integrate an external worktree manager with build/removal coordination.
+    #[cfg(feature = "experimental")]
     Hook {
         /// Worktree lifecycle event.
         #[command(subcommand)]
         action: HookCommand,
     },
     /// Inspect or adopt an externally provisioned store-scoped hard quota.
+    #[cfg(feature = "experimental")]
     Quota {
         /// Quota operation.
         #[command(subcommand)]
@@ -127,6 +131,7 @@ pub(crate) enum Command {
 }
 
 #[derive(Debug, Subcommand)]
+#[cfg(feature = "experimental")]
 pub(crate) enum HistoryCommand {
     /// Remove only validated receipts selected by deterministic bounds.
     Prune {
@@ -158,6 +163,7 @@ pub(crate) enum HistoryCommand {
 }
 
 #[derive(Debug, Subcommand)]
+#[cfg(feature = "experimental")]
 pub(crate) enum HookCommand {
     /// Register or reactivate a validated Git worktree.
     Ready {
@@ -204,6 +210,7 @@ pub(crate) enum HookCommand {
 }
 
 #[derive(Debug, Subcommand)]
+#[cfg(feature = "experimental")]
 pub(crate) enum QuotaCommand {
     /// Inspect provider capability and adopted expectation health.
     Status,

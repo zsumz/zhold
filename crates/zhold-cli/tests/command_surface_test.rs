@@ -140,6 +140,7 @@ fn trash_only_gc_needs_no_budget() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+#[cfg(feature = "experimental")]
 fn history_policy_query_and_prune_are_structured() -> Result<(), Box<dyn std::error::Error>> {
     let temporary = tempdir()?;
     let store = temporary.path().join("store");
@@ -179,6 +180,7 @@ fn history_policy_query_and_prune_are_structured() -> Result<(), Box<dyn std::er
 }
 
 #[test]
+#[cfg(feature = "experimental")]
 fn hook_protocol_is_end_to_end_and_queryable() -> Result<(), Box<dyn std::error::Error>> {
     let temporary = tempdir()?;
     let store = temporary.path().join("store");
@@ -236,6 +238,7 @@ fn hook_protocol_is_end_to_end_and_queryable() -> Result<(), Box<dyn std::error:
 }
 
 #[test]
+#[cfg(feature = "experimental")]
 fn quota_status_and_plan_are_non_privileged_and_non_mutating()
 -> Result<(), Box<dyn std::error::Error>> {
     let temporary = tempdir()?;
@@ -259,6 +262,22 @@ fn quota_status_and_plan_are_non_privileged_and_non_mutating()
     let plan_json: serde_json::Value = serde_json::from_slice(&plan.stdout)?;
     assert_eq!(plan_json["hard_limit"], 20_u64 * 1_024 * 1_024 * 1_024);
     assert!(!store.join("quota.json").exists());
+    Ok(())
+}
+
+#[test]
+#[cfg(not(feature = "experimental"))]
+fn default_help_excludes_experimental_control_plane() -> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let store = temporary.path().join("store");
+
+    let output = zhold(&store, temporary.path(), &["--help"])?;
+    let help = String::from_utf8(output.stdout)?;
+
+    assert!(output.status.success());
+    assert!(!help.contains("  history"));
+    assert!(!help.contains("  hook"));
+    assert!(!help.contains("  quota"));
     Ok(())
 }
 

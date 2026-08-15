@@ -12,6 +12,10 @@ readme.workspace = true
 keywords = ["cargo", "rust", "worktree", "storage", "build"]
 categories = ["command-line-utilities", "development-tools::build-utils"]
 
+[features]
+default = []
+experimental = []
+
 [[bin]]
 name = "zhold"
 path = "src/main.rs"

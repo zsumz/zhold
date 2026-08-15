@@ -1,7 +1,9 @@
 use clap::Parser;
 use zhold_core::ByteSize;
 
-use super::{Cli, Command, HistoryCommand, HookCommand, QuotaCommand};
+use super::{Cli, Command};
+#[cfg(feature = "experimental")]
+use super::{HistoryCommand, HookCommand, QuotaCommand};
 
 #[test]
 fn parses_persistent_setup_defaults() -> Result<(), clap::Error> {
@@ -138,6 +140,7 @@ fn parses_expiring_pins_and_trash_only_gc() -> Result<(), clap::Error> {
 }
 
 #[test]
+#[cfg(feature = "experimental")]
 fn parses_history_filters_and_maintenance() -> Result<(), clap::Error> {
     let query = Cli::try_parse_from([
         "zhold", "history", "--kind", "build", "--since", "12h", "--limit", "25",
@@ -170,6 +173,7 @@ fn parses_history_filters_and_maintenance() -> Result<(), clap::Error> {
 }
 
 #[test]
+#[cfg(feature = "experimental")]
 fn parses_hook_and_quota_protocols() -> Result<(), clap::Error> {
     let hook = Cli::try_parse_from([
         "zhold",

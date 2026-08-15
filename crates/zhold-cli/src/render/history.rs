@@ -1,10 +1,11 @@
 use std::io::{self, Write};
 
 use serde::Serialize;
+#[cfg(feature = "experimental")]
 use zhold_core::HistoryPolicy;
-use zhold_store::{
-    BuildFinalization, HistoryPruneReport, HistoryReport, HistoryWarning, HistoryWarningEvent,
-};
+use zhold_store::{BuildFinalization, HistoryWarning, HistoryWarningEvent};
+#[cfg(feature = "experimental")]
+use zhold_store::{HistoryPruneReport, HistoryReport};
 
 use super::output::output_error;
 use crate::{CliError, app::OutputFormat, render::json};
@@ -46,6 +47,7 @@ pub(crate) fn finalization(
     Ok(())
 }
 
+#[cfg(feature = "experimental")]
 pub(crate) fn report(report: &HistoryReport, format: OutputFormat) -> Result<(), CliError> {
     if matches!(format, OutputFormat::Json) {
         return json::write(report);
@@ -84,6 +86,7 @@ pub(crate) fn report(report: &HistoryReport, format: OutputFormat) -> Result<(),
     Ok(())
 }
 
+#[cfg(feature = "experimental")]
 pub(crate) fn pruned(report: &HistoryPruneReport, format: OutputFormat) -> Result<(), CliError> {
     if matches!(format, OutputFormat::Json) {
         return json::write(report);
@@ -116,6 +119,7 @@ pub(crate) fn pruned(report: &HistoryPruneReport, format: OutputFormat) -> Resul
     Ok(())
 }
 
+#[cfg(feature = "experimental")]
 pub(crate) fn policy(
     policy: &HistoryPolicy,
     retention: Option<&HistoryPruneReport>,

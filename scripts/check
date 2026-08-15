@@ -24,6 +24,7 @@ run_cargo() {
 cargo fmt --all -- --check
 run_cargo clippy --workspace --all-targets --all-features -- -D warnings
 run_cargo test --workspace --all-features
+run_cargo test -p zhold --no-default-features default_help_excludes_experimental_control_plane
 RUSTDOCFLAGS="-D warnings" run_cargo doc --workspace --all-features --no-deps
 
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
