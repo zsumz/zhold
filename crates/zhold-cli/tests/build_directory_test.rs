@@ -34,9 +34,10 @@ fn managed_directory_overrides_every_cargo_configuration_source()
         .current_dir(&project)
         .output()?;
 
+    let findings = Store::open(&store)?.inventory()?.findings;
     assert!(
         output.status.success(),
-        "managed Cargo failed: {}",
+        "managed Cargo failed: {}; inventory findings: {findings:?}",
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(!project_override.exists());
