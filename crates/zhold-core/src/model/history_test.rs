@@ -9,6 +9,7 @@ fn history_kinds_have_a_closed_stable_cli_vocabulary() {
         ("collection", HistoryKind::Collection),
         ("hook", HistoryKind::Hook),
         ("quota", HistoryKind::Quota),
+        ("recovery", HistoryKind::Recovery),
     ] {
         assert_eq!(HistoryKind::from_str(text), Ok(expected));
         assert_eq!(expected.to_string(), text);

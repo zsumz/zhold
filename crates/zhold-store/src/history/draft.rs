@@ -2,11 +2,24 @@ use zhold_core::HistoryKind;
 
 use super::{
     BuildReceipt, CollectionReceipt, CollectionReceiptSource, HistoryDraft, HistoryPayload,
-    HookReceipt, QuotaReceipt, QuotaReceiptAction,
+    HookReceipt, QuotaReceipt, QuotaReceiptAction, RecoveryReason, RecoveryReceipt,
 };
 use crate::{CollectionReport, HookReport, QuotaStatus, WorktreeIntegration};
 
 impl HistoryDraft {
+    pub(crate) fn recovery(arena_id: zhold_core::ArenaId) -> Self {
+        Self {
+            kind: HistoryKind::Recovery,
+            payload: HistoryPayload::Recovery(RecoveryReceipt {
+                arena_id,
+                previous_state: zhold_core::ArenaState::Suspect,
+                outcome: zhold_core::BuildOutcome::Terminated,
+                reason: RecoveryReason::ProcessTreeConfirmedStopped,
+                store_schema_version: crate::manifest::STORE_SCHEMA_VERSION,
+            }),
+        }
+    }
+
     pub(crate) fn build(receipt: BuildReceipt, integration: Option<&WorktreeIntegration>) -> Self {
         let mut receipt = receipt;
         if let Some(integration) = integration {

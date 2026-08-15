@@ -204,6 +204,7 @@ fn validate_receipt(
         HistoryPayload::Collection(_) => HistoryKind::Collection,
         HistoryPayload::Hook(_) => HistoryKind::Hook,
         HistoryPayload::Quota(_) => HistoryKind::Quota,
+        HistoryPayload::Recovery(_) => HistoryKind::Recovery,
     };
     let valid = receipt.schema_version == 1
         && receipt.store_id == store.marker.store_id
@@ -239,6 +240,9 @@ fn matches_query(receipt: &HistoryReceipt, query: &HistoryQuery) -> bool {
             .as_ref()
             .is_none_or(|prefix| match &receipt.payload {
                 HistoryPayload::Build(build) => build.arena_id.as_str().starts_with(prefix),
+                HistoryPayload::Recovery(recovery) => {
+                    recovery.arena_id.as_str().starts_with(prefix)
+                }
                 _ => false,
             })
         && query

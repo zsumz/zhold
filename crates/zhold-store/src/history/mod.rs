@@ -21,6 +21,6 @@ pub(crate) use prune::prune;
 pub(crate) use reader::{history_policy, read_history, summary};
 pub use receipt::{
     BuildReceipt, CollectionReceipt, CollectionReceiptSource, HistoryPayload, HistoryReceipt,
-    HookReceipt, QuotaReceipt, QuotaReceiptAction,
+    HookReceipt, QuotaReceipt, QuotaReceiptAction, RecoveryReason, RecoveryReceipt,
 };
 pub(crate) use writer::{persist, set_policy};

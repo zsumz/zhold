@@ -12,7 +12,8 @@ pub(super) fn execute(
     format: OutputFormat,
 ) -> Result<ExitStatus, CliError> {
     let arena = super::selector::resolve(store, selector)?;
-    store.recover_suspect(&arena)?;
+    let history = store.recover_suspect(&arena)?;
     render::recovery(&arena, format)?;
+    render::history_warnings(&history.warnings, format)?;
     Ok(ExitStatus::SUCCESS)
 }

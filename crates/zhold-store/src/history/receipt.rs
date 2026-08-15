@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use zhold_core::{
-    ArenaId, BuildOutcome, ByteSize, CargoCommandClass, HistoryKind, HookEvent, HookResult,
-    QuotaHealth, QuotaProvider, RepositoryId, ToolchainId, WorkspaceId, WorktreeId,
+    ArenaId, ArenaState, BuildOutcome, ByteSize, CargoCommandClass, HistoryKind, HookEvent,
+    HookResult, QuotaHealth, QuotaProvider, RepositoryId, ToolchainId, WorkspaceId, WorktreeId,
     WorktreeIntegrationState,
 };
 
@@ -38,6 +38,32 @@ pub enum HistoryPayload {
     Hook(HookReceipt),
     /// Quota expectation event.
     Quota(QuotaReceipt),
+    /// Explicit operator recovery of a suspect arena.
+    Recovery(RecoveryReceipt),
+}
+
+/// Auditable operator decision that made an unleased unfinished arena collectible.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RecoveryReceipt {
+    /// Stable arena identity.
+    pub arena_id: ArenaId,
+    /// Protected state required before recovery.
+    pub previous_state: ArenaState,
+    /// Authoritative lifecycle outcome recorded by recovery.
+    pub outcome: BuildOutcome,
+    /// Stable operator action rather than arbitrary free-form text.
+    pub reason: RecoveryReason,
+    /// Store schema governing the recovered manifest.
+    pub store_schema_version: u32,
+}
+
+/// Stable reason for an authoritative recovery transition.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RecoveryReason {
+    /// The operator confirmed the orphaned Cargo process tree is no longer alive.
+    ProcessTreeConfirmedStopped,
 }
 
 /// Source of one committed collection receipt.

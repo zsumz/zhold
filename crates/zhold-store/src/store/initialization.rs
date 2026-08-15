@@ -154,7 +154,7 @@ fn cleanup_abandoned_staging(root: &Path) -> Result<(), StoreError> {
     Ok(())
 }
 
-fn verify_filesystem_capabilities(root: &Path) -> Result<(), StoreError> {
+pub(super) fn verify_filesystem_capabilities(root: &Path) -> Result<(), StoreError> {
     let nonce = Uuid::new_v4();
     let source = root.join(format!("store.probe.{nonce}.source"));
     let link = root.join(format!("store.probe.{nonce}.link"));

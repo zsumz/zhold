@@ -33,7 +33,7 @@ pub use history::{
     FinalizationWarning, FinalizationWarningEvent, HistoryFinding, HistoryPayload,
     HistoryPolicyDocument, HistoryPruneReport, HistoryPruneRequest, HistoryQuery, HistoryReceipt,
     HistoryReport, HistorySummary, HistoryWarning, HistoryWarningEvent, HistoryWrite, HookReceipt,
-    QuotaReceipt, QuotaReceiptAction,
+    QuotaReceipt, QuotaReceiptAction, RecoveryReason, RecoveryReceipt,
 };
 pub use inventory::{Inventory, InventoryDepth, InventoryEntry, InventoryFinding};
 pub use quota::{

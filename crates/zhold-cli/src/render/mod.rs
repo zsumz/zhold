@@ -22,7 +22,7 @@ pub(crate) use collection::{collection, pin, post_build, preflight, trash};
 pub(crate) use config::setup;
 pub(crate) use doctor::doctor;
 pub(crate) use explain::explain;
-pub(crate) use history::finalization as history_finalization;
+pub(crate) use history::{finalization as history_finalization, warnings as history_warnings};
 #[cfg(feature = "experimental")]
 pub(crate) use history::{policy as history_policy, pruned as history_pruned, report as history};
 #[cfg(feature = "experimental")]

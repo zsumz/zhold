@@ -5,7 +5,7 @@ use crate::{
     layout::StoreLayout,
     store::initialization::{
         ensure_layout, inspect_store_root, open_marker_read_only, open_marker_read_write,
-        prepare_store_root,
+        prepare_store_root, verify_filesystem_capabilities,
     },
 };
 
@@ -32,6 +32,7 @@ impl Store {
             .map_err(|error| StoreError::io("canonicalize store root", requested, error))?;
         let layout = StoreLayout::new(root);
         let marker = open_marker_read_write(&layout)?;
+        verify_filesystem_capabilities(layout.root())?;
         ensure_layout(&layout)?;
         Ok(Self { layout, marker })
     }

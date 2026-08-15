@@ -1,7 +1,8 @@
 use zhold_core::{ArenaId, BuildOutcome};
 
 use crate::{
-    Store, StoreError,
+    HistoryWrite, Store, StoreError,
+    history::{HistoryDraft, persist},
     inventory::ensure_real_contained_directory,
     io::{measure_tree, read_json, write_json},
     lock::ExclusiveFileLock,
@@ -11,12 +12,12 @@ use crate::{
 
 impl Store {
     /// Marks a suspect build terminated after the caller confirms its process tree is gone.
-    pub fn recover_suspect(&self, id: &ArenaId) -> Result<(), StoreError> {
-        let _collection = ExclusiveFileLock::acquire(&self.layout.collection_lock())?;
-        let Some(_arena_lock) = ExclusiveFileLock::try_acquire(&self.layout.arena_lock(id))? else {
+    pub fn recover_suspect(&self, id: &ArenaId) -> Result<HistoryWrite, StoreError> {
+        let collection = ExclusiveFileLock::acquire(&self.layout.collection_lock())?;
+        let Some(arena_lock) = ExclusiveFileLock::try_acquire(&self.layout.arena_lock(id))? else {
             return Err(StoreError::ArenaActive(id.to_string()));
         };
-        let _metadata = ExclusiveFileLock::acquire(&self.layout.metadata_lock(id))?;
+        let metadata = ExclusiveFileLock::acquire(&self.layout.metadata_lock(id))?;
         let arena = self.layout.arena(id);
         if !arena.exists() {
             return Err(StoreError::ArenaNotFound(id.to_string()));
@@ -43,6 +44,10 @@ impl Store {
             measured,
             unix_seconds()?,
         );
-        write_json(&manifest_path, &manifest)
+        write_json(&manifest_path, &manifest)?;
+        drop(metadata);
+        drop(arena_lock);
+        drop(collection);
+        Ok(persist(self, HistoryDraft::recovery(id.clone())))
     }
 }

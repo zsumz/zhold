@@ -17,6 +17,8 @@ pub enum HistoryKind {
     Hook,
     /// A quota expectation transition or drift observation.
     Quota,
+    /// An explicit suspect-arena recovery decision.
+    Recovery,
 }
 
 impl Display for HistoryKind {
@@ -26,6 +28,7 @@ impl Display for HistoryKind {
             Self::Collection => "collection",
             Self::Hook => "hook",
             Self::Quota => "quota",
+            Self::Recovery => "recovery",
         })
     }
 }
@@ -39,6 +42,7 @@ impl FromStr for HistoryKind {
             "collection" => Ok(Self::Collection),
             "hook" => Ok(Self::Hook),
             "quota" => Ok(Self::Quota),
+            "recovery" => Ok(Self::Recovery),
             _ => Err(ParseHistoryKindError(value.to_owned())),
         }
     }
@@ -46,7 +50,7 @@ impl FromStr for HistoryKind {
 
 /// Error returned for an unknown history category.
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
-#[error("unknown history kind `{0}`; expected build, collection, hook, or quota")]
+#[error("unknown history kind `{0}`; expected build, collection, hook, quota, or recovery")]
 pub struct ParseHistoryKindError(String);
 
 /// Persisted receipt-retention policy.
