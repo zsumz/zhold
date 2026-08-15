@@ -229,7 +229,7 @@ fn read_entry(
             } else {
                 ByteSize::ZERO
             },
-            last_peak: manifest.last_peak,
+            last_observed_size: manifest.last_observed_size,
             pin_expires_at: manifest.pin_expires_at,
             worktree_state: integration.as_ref().map(|record| record.state),
             manager: integration

@@ -14,7 +14,7 @@ pub(crate) fn explain(report: &ArenaExplanation, format: OutputFormat) -> Result
     writeln!(output, "state       {}", state_name(report.state)).map_err(output_error)?;
     writeln!(output, "size        {}", record.size).map_err(output_error)?;
     writeln!(output, "reservation {}", report.entry.reservation).map_err(output_error)?;
-    writeln!(output, "last peak   {}", report.entry.last_peak).map_err(output_error)?;
+    writeln!(output, "high water  {}", report.entry.last_observed_size).map_err(output_error)?;
     writeln!(output, "repository  {}", record.repository_id).map_err(output_error)?;
     writeln!(output, "worktree    {}", record.worktree_id).map_err(output_error)?;
     writeln!(output, "workspace   {}", record.workspace_id).map_err(output_error)?;

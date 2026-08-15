@@ -18,7 +18,7 @@ pub(super) fn execute(
     if let Ok(Some(quota)) = store.observe_adopted_quota() {
         let _ignored = render::quota_post_build(&quota, format);
     }
-    let finalization = lease.finish_with_peak(report.outcome, report.peak_size);
+    let finalization = lease.finish_with_observation(report.outcome, report.high_water_observation);
     match finalization {
         Ok(finalization) => {
             render::cargo_finish_with_history(report, &finalization, format)?;

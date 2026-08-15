@@ -16,10 +16,10 @@ The default contract is a steady-state arena budget:
 5. Finalize the arena durably, release the lease, and collect again.
 
 The default backend cannot prevent a running process from exceeding its
-reservation. It combines a persistent minimum, historical p95 growth, previous
-peak growth, and a minimum-free-space floor to make that risk conservative and
-visible. Only a successfully adopted operating-system quota is a hard physical
-byte boundary.
+reservation. It combines a persistent minimum, historical p95 observed growth,
+the previous observed growth, and a minimum-free-space floor to make that risk
+conservative and visible. Only a successfully adopted operating-system quota is
+a hard physical byte boundary.
 
 ## Crates
 
@@ -37,14 +37,19 @@ from gaining arena-manifest access.
 
 ```text
 absent -> initialized -> active -> idle/failed -> retired -> deleted
-                         |             |
-                         +-- pinned ---+
+                         |   |         |
+                         |   +-> suspect (explicit recovery required)
+                         +------> pinned
 ```
 
 An active arena is protected by an operating-system file lock outside the arena
 tree. The manifest revision changes at lifecycle transitions. Collection plans
 from an immutable snapshot, then rereads and revalidates identity, revision,
 pin, lease, and worktree state immediately before retirement.
+
+If a build is unfinished after its sentinel lease disappears, the arena becomes
+suspect. Its size and reservation remain protected, collection refuses to
+retire it, and reuse requires an explicit recovery decision.
 
 Retirement first renames an owned arena into owned trash. Recursive removal is
 attempted only after that namespace transition. Failed physical deletion leaves

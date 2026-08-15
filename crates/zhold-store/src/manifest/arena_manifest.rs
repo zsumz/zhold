@@ -9,7 +9,7 @@ use zhold_core::{
 
 use crate::{BuildContext, StoreError};
 
-pub(crate) const ARENA_SCHEMA_VERSION: u32 = 4;
+pub(crate) const ARENA_SCHEMA_VERSION: u32 = 5;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(crate) struct ArenaManifest {
@@ -40,8 +40,8 @@ pub(crate) struct ArenaManifest {
     pub(crate) pin_expires_at: Option<u64>,
     #[serde(default)]
     pub(crate) reservation: ByteSize,
-    #[serde(default)]
-    pub(crate) last_peak: ByteSize,
+    #[serde(default, alias = "last_peak")]
+    pub(crate) last_observed_size: ByteSize,
     #[serde(default)]
     pub(crate) last_known_size: ByteSize,
     #[serde(default)]
@@ -75,7 +75,7 @@ impl ArenaManifest {
             pinned: false,
             pin_expires_at: None,
             reservation: ByteSize::ZERO,
-            last_peak: ByteSize::ZERO,
+            last_observed_size: ByteSize::ZERO,
             last_known_size: ByteSize::ZERO,
             retirement_id: None,
         }
@@ -179,8 +179,8 @@ impl ArenaManifest {
     pub(crate) fn finish(
         &mut self,
         outcome: BuildOutcome,
-        peak: ByteSize,
-        final_bytes: ByteSize,
+        high_water_observation: ByteSize,
+        final_bytes: Option<ByteSize>,
         now: u64,
     ) {
         self.schema_version = ARENA_SCHEMA_VERSION;
@@ -189,8 +189,10 @@ impl ArenaManifest {
         self.last_finished_at = Some(now);
         self.last_outcome = Some(outcome);
         self.reservation = ByteSize::ZERO;
-        self.last_peak = peak;
-        self.last_known_size = final_bytes;
+        self.last_observed_size = high_water_observation;
+        if let Some(final_bytes) = final_bytes {
+            self.last_known_size = final_bytes;
+        }
     }
 
     pub(crate) fn observe_size(&mut self, size: ByteSize) {

@@ -80,22 +80,27 @@ impl ArenaLease {
         self.finish_observed(outcome, ByteSize::ZERO)
     }
 
-    /// Records the child outcome and observed peak arena size, then releases the lease.
-    pub fn finish_with_peak(
+    /// Records the child outcome and a bounded high-water size observation.
+    pub fn finish_with_observation(
         self,
         outcome: BuildOutcome,
-        peak: ByteSize,
+        high_water_observation: ByteSize,
     ) -> Result<BuildFinalization, StoreError> {
-        self.finish_observed(outcome, peak)
+        self.finish_observed(outcome, high_water_observation)
     }
 
-    /// Records the bounded peak observation used by build history.
+    /// Records an admitted command that failed before Cargo was spawned.
+    pub fn finish_not_started(self) -> Result<BuildFinalization, StoreError> {
+        self.finish_observed(BuildOutcome::NotStarted, ByteSize::ZERO)
+    }
+
+    /// Records the bounded high-water observation used by build history.
     pub(crate) fn finish_observed(
         mut self,
         outcome: BuildOutcome,
-        peak: ByteSize,
+        high_water_observation: ByteSize,
     ) -> Result<BuildFinalization, StoreError> {
-        let final_bytes = self.measure().unwrap_or(peak);
+        let final_bytes = self.measure().ok();
         let integration = self
             .worktree
             .as_ref()
@@ -103,7 +108,7 @@ impl ArenaLease {
         let primary = self.store.finish_primary(
             &self.arena_id,
             outcome,
-            peak,
+            high_water_observation,
             self.initial_bytes,
             final_bytes,
             self.started_at,
@@ -111,7 +116,11 @@ impl ArenaLease {
         )?;
         self.finished = true;
         self.release_locks();
-        let warnings = self.learn_reservation(primary.command_class, primary.observed_growth);
+        let warnings = if matches!(outcome, BuildOutcome::NotStarted) {
+            Vec::new()
+        } else {
+            self.learn_reservation(primary.command_class, primary.observed_growth)
+        };
         self.pending_history.push(primary.history);
         let history = self
             .pending_history
@@ -149,7 +158,7 @@ impl Drop for ArenaLease {
             return;
         }
         self.finished = true;
-        let final_bytes = self.measure().unwrap_or(ByteSize::ZERO);
+        let final_bytes = self.measure().ok();
         let integration = self
             .worktree
             .as_ref()

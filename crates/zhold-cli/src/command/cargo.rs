@@ -29,7 +29,7 @@ pub(crate) struct CargoReport {
     pub(crate) outcome: BuildOutcome,
     pub(crate) exit_code: i32,
     pub(crate) reservation: ByteSize,
-    pub(crate) peak_size: ByteSize,
+    pub(crate) high_water_observation: ByteSize,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -149,7 +149,7 @@ fn execute_managed(
             });
         }
     };
-    let peak_size = std::cmp::max(initial_size, measured_or_zero(&lease));
+    let high_water_observation = std::cmp::max(initial_size, measured_or_zero(&lease));
     let exit_code = status.code().unwrap_or(1);
     let outcome = if status.success() {
         BuildOutcome::Succeeded
@@ -164,7 +164,7 @@ fn execute_managed(
         outcome,
         exit_code,
         reservation,
-        peak_size,
+        high_water_observation,
     };
     finalize::execute(store, lease, &report, limits, format)
 }
@@ -199,7 +199,7 @@ fn finish_before_error(
     lease: zhold_store::ArenaLease,
     format: OutputFormat,
 ) -> Result<(), CliError> {
-    let finalization = lease.finish(BuildOutcome::Terminated)?;
+    let finalization = lease.finish_not_started()?;
     let _ignored = render::history_finalization(&finalization, format);
     Ok(())
 }

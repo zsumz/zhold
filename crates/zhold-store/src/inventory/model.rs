@@ -62,8 +62,8 @@ pub struct InventoryEntry {
     pub command: CommandDescriptor,
     /// Additional growth headroom declared by this lease when active.
     pub reservation: ByteSize,
-    /// Largest observed arena size during the most recently completed run.
-    pub last_peak: ByteSize,
+    /// High-water size observed at one of the bounded lifecycle measurements.
+    pub last_observed_size: ByteSize,
     /// Unix timestamp at which an explicit pin expires, when finite.
     pub pin_expires_at: Option<u64>,
     /// Validated worktree lifecycle state when registered.

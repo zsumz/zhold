@@ -14,7 +14,8 @@ use crate::{
 };
 
 #[test]
-fn completed_build_publishes_a_private_peak_receipt() -> Result<(), Box<dyn std::error::Error>> {
+fn completed_build_publishes_a_private_high_water_receipt() -> Result<(), Box<dyn std::error::Error>>
+{
     let temporary = tempdir()?;
     let store = Store::open(temporary.path().join("store"))?;
     let worktree = temporary.path().join("worktree");
@@ -37,7 +38,7 @@ fn completed_build_publishes_a_private_peak_receipt() -> Result<(), Box<dyn std:
     let HistoryPayload::Build(build) = &report.receipts[0].payload else {
         return Err("expected build receipt".into());
     };
-    assert_eq!(build.observed_peak, ByteSize::from_bytes(300));
+    assert_eq!(build.high_water_observation, ByteSize::from_bytes(300));
     assert_eq!(build.reservation, ByteSize::from_bytes(400));
     assert_eq!(build.command_class, CargoCommandClass::Check);
     let encoded = serde_json::to_string(&report)?;

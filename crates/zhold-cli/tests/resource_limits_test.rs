@@ -35,7 +35,7 @@ fn minimum_free_space_blocks_cargo_before_spawn() -> Result<(), Box<dyn std::err
     let inventory = Store::open(&store)?.inventory()?;
     assert_eq!(
         inventory.arenas[0].record.last_outcome,
-        Some(BuildOutcome::Terminated)
+        Some(BuildOutcome::NotStarted)
     );
     assert!(!project.join("target").exists());
     Ok(())
@@ -65,7 +65,7 @@ fn build_reservation_participates_in_admission() -> Result<(), Box<dyn std::erro
     assert_eq!(inventory.reserved, ByteSize::ZERO);
     assert_eq!(
         inventory.arenas[0].record.last_outcome,
-        Some(BuildOutcome::Terminated)
+        Some(BuildOutcome::NotStarted)
     );
     Ok(())
 }

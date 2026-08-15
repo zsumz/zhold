@@ -55,10 +55,10 @@ fn live_reservations_are_admission_accounting_and_clear_on_finish()
     assert!(!report.budget_met);
 
     let peak = ByteSize::from_bytes(8_192);
-    lease.finish_with_peak(BuildOutcome::Succeeded, peak)?;
+    lease.finish_with_observation(BuildOutcome::Succeeded, peak)?;
     let finished = store.inventory()?;
     assert_eq!(finished.reserved, ByteSize::ZERO);
-    assert_eq!(finished.arenas[0].last_peak, peak);
+    assert_eq!(finished.arenas[0].last_observed_size, peak);
     Ok(())
 }
 

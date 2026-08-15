@@ -8,6 +8,8 @@ use crate::{ArenaId, ByteSize, RepositoryId, ToolchainId, WorkspaceId, WorktreeI
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "kind", content = "code")]
 pub enum BuildOutcome {
+    /// Cargo was never spawned after zhold admitted and prepared the arena.
+    NotStarted,
     /// The command exited successfully.
     Succeeded,
     /// The command exited with a non-zero status code.

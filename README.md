@@ -52,7 +52,8 @@ operating-system hard quota.
 
 Before Cargo starts, zhold serializes admission, counts every live build
 reservation, collects cold arenas, and checks an optional free-space floor.
-Reservations learn from the command class's historical p95 and previous peak.
+Reservations learn from the command class's historical p95 and previous
+observed growth.
 After the complete Cargo process tree exits, zhold finalizes the arena, releases
 its lease, and collects again.
 

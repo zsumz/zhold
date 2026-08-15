@@ -53,7 +53,7 @@ pub(crate) fn cargo_finish(report: &CargoReport, format: OutputFormat) -> Result
             outcome: BuildOutcome,
             exit_code: i32,
             reservation: ByteSize,
-            peak_size: zhold_core::ByteSize,
+            high_water_observation: zhold_core::ByteSize,
         }
         return json::write_stderr(&Finish {
             event: "cargo_finished",
@@ -62,7 +62,7 @@ pub(crate) fn cargo_finish(report: &CargoReport, format: OutputFormat) -> Result
             outcome: report.outcome,
             exit_code: report.exit_code,
             reservation: report.reservation,
-            peak_size: report.peak_size,
+            high_water_observation: report.high_water_observation,
         });
     }
     let stderr = io::stderr();
@@ -98,7 +98,7 @@ pub(crate) fn cargo_finalization_failed(
             build_dir: &'a Path,
             outcome: BuildOutcome,
             exit_code: i32,
-            peak_size: zhold_core::ByteSize,
+            high_water_observation: zhold_core::ByteSize,
             error: &'a str,
         }
         return json::write_stderr(&Failure {
@@ -107,7 +107,7 @@ pub(crate) fn cargo_finalization_failed(
             build_dir: &report.build_dir,
             outcome: report.outcome,
             exit_code: report.exit_code,
-            peak_size: report.peak_size,
+            high_water_observation: report.high_water_observation,
             error,
         });
     }
@@ -160,6 +160,7 @@ fn short_id(arena: &ArenaId) -> &str {
 
 const fn outcome_name(outcome: BuildOutcome) -> &'static str {
     match outcome {
+        BuildOutcome::NotStarted => "not_started",
         BuildOutcome::Succeeded => "succeeded",
         BuildOutcome::Failed(_) => "failed",
         BuildOutcome::Terminated => "terminated",

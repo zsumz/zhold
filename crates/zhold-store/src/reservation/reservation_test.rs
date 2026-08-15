@@ -75,3 +75,40 @@ fn advisory_learning_failure_preserves_the_committed_outcome()
     );
     Ok(())
 }
+
+#[test]
+fn a_command_rejected_before_spawn_does_not_train_reservations()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let project = tempdir()?;
+    let store = Store::open(temporary.path().join("store"))?;
+    let context = test_support::context(project.path())?;
+    let invocation = test_support::invocation(project.path())?;
+
+    store.lease(&context, &invocation)?.finish_not_started()?;
+
+    let manifest: ArenaManifest = read_json(&store.layout.manifest(context.arena_id()))?;
+    assert_eq!(manifest.last_outcome, Some(BuildOutcome::NotStarted));
+    assert!(!store.layout.reservation_profile().exists());
+    Ok(())
+}
+
+#[test]
+fn absent_final_measurement_preserves_the_durable_size() -> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let project = tempdir()?;
+    let store = Store::open(temporary.path().join("store"))?;
+    let (context, _) = test_support::create_idle_arena(&store, project.path(), 4_096)?;
+    let mut manifest: ArenaManifest = read_json(&store.layout.manifest(context.arena_id()))?;
+    let durable = manifest.last_known_size;
+
+    manifest.finish(
+        BuildOutcome::Terminated,
+        durable,
+        None,
+        manifest.last_used_at.saturating_add(1),
+    );
+
+    assert_eq!(manifest.last_known_size, durable);
+    Ok(())
+}

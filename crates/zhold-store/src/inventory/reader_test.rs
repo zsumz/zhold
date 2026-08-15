@@ -67,7 +67,7 @@ fn reads_schema_one_manifests_with_safe_defaults() -> Result<(), Box<dyn std::er
     object.insert("schema_version".to_owned(), serde_json::Value::from(1));
     object.remove("pin_expires_at");
     object.remove("reservation");
-    object.remove("last_peak");
+    object.remove("last_observed_size");
     object.remove("retirement_id");
     fs::write(&manifest_path, serde_json::to_vec(&value)?)?;
 
@@ -75,7 +75,10 @@ fn reads_schema_one_manifests_with_safe_defaults() -> Result<(), Box<dyn std::er
 
     assert_eq!(inventory.arenas.len(), 1);
     assert_eq!(inventory.arenas[0].reservation, zhold_core::ByteSize::ZERO);
-    assert_eq!(inventory.arenas[0].last_peak, zhold_core::ByteSize::ZERO);
+    assert_eq!(
+        inventory.arenas[0].last_observed_size,
+        zhold_core::ByteSize::ZERO
+    );
     assert_eq!(inventory.arenas[0].pin_expires_at, None);
     Ok(())
 }

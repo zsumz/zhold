@@ -21,9 +21,9 @@ impl Store {
         &self,
         id: &ArenaId,
         outcome: BuildOutcome,
-        peak: ByteSize,
+        high_water_observation: ByteSize,
         initial_bytes: ByteSize,
-        final_bytes: ByteSize,
+        final_bytes: Option<ByteSize>,
         started_at: u64,
         integration: Option<&crate::WorktreeIntegration>,
     ) -> Result<PrimaryFinalization, StoreError> {
@@ -35,9 +35,16 @@ impl Store {
         let finished_at = unix_milliseconds()?;
         let reservation = manifest.reservation;
         let command_class = manifest.command.command_class;
-        manifest.finish(outcome, peak, final_bytes, finished_seconds);
+        let final_bytes = final_bytes.unwrap_or(manifest.last_known_size);
+        let high_water_observation = high_water_observation.max(initial_bytes).max(final_bytes);
+        manifest.finish(
+            outcome,
+            high_water_observation,
+            Some(final_bytes),
+            finished_seconds,
+        );
         write_json(&manifest_path, &manifest)?;
-        let observed_growth = std::cmp::max(peak, final_bytes).saturating_sub(initial_bytes);
+        let observed_growth = high_water_observation.saturating_sub(initial_bytes);
         let history = HistoryDraft::build(
             BuildReceipt {
                 arena_id: manifest.arena_id,
@@ -53,11 +60,11 @@ impl Store {
                 exit_code: match outcome {
                     BuildOutcome::Succeeded => Some(0),
                     BuildOutcome::Failed(code) => Some(code),
-                    BuildOutcome::Terminated => None,
+                    BuildOutcome::NotStarted | BuildOutcome::Terminated => None,
                 },
                 initial_bytes,
                 final_bytes,
-                observed_peak: peak,
+                high_water_observation,
                 reservation,
                 manager: None,
                 label: None,

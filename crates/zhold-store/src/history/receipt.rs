@@ -85,8 +85,9 @@ pub struct BuildReceipt {
     pub initial_bytes: ByteSize,
     /// Arena bytes observed after child exit.
     pub final_bytes: ByteSize,
-    /// Best sampled arena-size lower bound.
-    pub observed_peak: ByteSize,
+    /// Largest arena size seen by the bounded lifecycle observations.
+    #[serde(alias = "observed_peak")]
+    pub high_water_observation: ByteSize,
     /// Declared additional growth reservation.
     pub reservation: ByteSize,
     /// Registered worktree manager at admission.
