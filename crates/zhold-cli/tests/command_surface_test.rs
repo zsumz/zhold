@@ -60,7 +60,7 @@ fn scan_reports_but_never_mutates_a_foreign_target() -> Result<(), Box<dyn std::
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout)?;
     assert!(stdout.contains("foreign Cargo targets: 1"));
-    assert!(stdout.contains(&target.display().to_string()));
+    assert!(stdout.contains(&target.canonicalize()?.display().to_string()));
     assert!(target.join("artifact.rlib").is_file());
     Ok(())
 }
