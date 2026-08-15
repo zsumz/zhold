@@ -89,10 +89,6 @@ pub struct BuildReceipt {
     pub observed_peak: ByteSize,
     /// Declared additional growth reservation.
     pub reservation: ByteSize,
-    /// Optional warning-only arena threshold.
-    pub warning_threshold: Option<ByteSize>,
-    /// Whether the warning threshold was sampled as exceeded.
-    pub warning_threshold_exceeded: bool,
     /// Registered worktree manager at admission.
     pub manager: Option<String>,
     /// Registered worktree label at admission.

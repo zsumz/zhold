@@ -19,8 +19,6 @@ impl Store {
         initial_bytes: ByteSize,
         final_bytes: ByteSize,
         started_at: u64,
-        warning_threshold: Option<ByteSize>,
-        warning_threshold_exceeded: bool,
         integration: Option<&crate::WorktreeIntegration>,
     ) -> Result<HistoryDraft, StoreError> {
         let _metadata_lock = ExclusiveFileLock::acquire(&self.layout.metadata_lock(id))?;
@@ -56,8 +54,6 @@ impl Store {
                 final_bytes,
                 observed_peak: peak,
                 reservation,
-                warning_threshold,
-                warning_threshold_exceeded,
                 manager: None,
                 label: None,
                 session: None,

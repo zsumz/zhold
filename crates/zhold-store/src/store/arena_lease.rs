@@ -77,7 +77,7 @@ impl ArenaLease {
 
     /// Records the child process outcome and releases the lease.
     pub fn finish(self, outcome: BuildOutcome) -> Result<BuildFinalization, StoreError> {
-        self.finish_observed(outcome, ByteSize::ZERO, None, false)
+        self.finish_observed(outcome, ByteSize::ZERO)
     }
 
     /// Records the child outcome and observed peak arena size, then releases the lease.
@@ -86,16 +86,14 @@ impl ArenaLease {
         outcome: BuildOutcome,
         peak: ByteSize,
     ) -> Result<BuildFinalization, StoreError> {
-        self.finish_observed(outcome, peak, None, false)
+        self.finish_observed(outcome, peak)
     }
 
-    /// Records the complete bounded peak observation used by build history.
+    /// Records the bounded peak observation used by build history.
     pub(crate) fn finish_observed(
         mut self,
         outcome: BuildOutcome,
         peak: ByteSize,
-        warning_threshold: Option<ByteSize>,
-        warning_threshold_exceeded: bool,
     ) -> Result<BuildFinalization, StoreError> {
         let final_bytes = self.measure().unwrap_or(peak);
         let integration = self
@@ -109,8 +107,6 @@ impl ArenaLease {
             self.initial_bytes,
             final_bytes,
             self.started_at,
-            warning_threshold,
-            warning_threshold_exceeded,
             integration,
         )?;
         self.finished = true;
@@ -148,8 +144,6 @@ impl Drop for ArenaLease {
             self.initial_bytes,
             final_bytes,
             self.started_at,
-            None,
-            false,
             integration,
         );
         self.release_locks();

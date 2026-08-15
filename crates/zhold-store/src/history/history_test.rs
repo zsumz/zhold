@@ -28,12 +28,7 @@ fn completed_build_publishes_a_private_peak_receipt() -> Result<(), Box<dyn std:
 
     let lease = store.lease_reserved(&context, &invocation, ByteSize::from_bytes(400))?;
     fs::write(lease.build_dir().join("artifact"), vec![1_u8; 200])?;
-    let finalization = lease.finish_observed(
-        BuildOutcome::Succeeded,
-        ByteSize::from_bytes(300),
-        Some(ByteSize::from_bytes(250)),
-        true,
-    )?;
+    let finalization = lease.finish_observed(BuildOutcome::Succeeded, ByteSize::from_bytes(300))?;
 
     assert_eq!(finalization.history.len(), 1);
     assert!(finalization.history[0].warnings.is_empty());
@@ -45,7 +40,6 @@ fn completed_build_publishes_a_private_peak_receipt() -> Result<(), Box<dyn std:
     assert_eq!(build.observed_peak, ByteSize::from_bytes(300));
     assert_eq!(build.reservation, ByteSize::from_bytes(400));
     assert_eq!(build.command_class, CargoCommandClass::Check);
-    assert!(build.warning_threshold_exceeded);
     let encoded = serde_json::to_string(&report)?;
     assert!(!encoded.contains("secret-value"));
     Ok(())

@@ -22,7 +22,7 @@ fn completed_growth_increases_the_next_command_reservation()
     let lease = store.lease(&context, &invocation)?;
     fs::write(lease.build_dir().join("growth"), vec![1_u8; 512])?;
     let peak = lease.measure()?;
-    let _finalization = lease.finish_observed(BuildOutcome::Succeeded, peak, None, false)?;
+    let _finalization = lease.finish_observed(BuildOutcome::Succeeded, peak)?;
 
     assert!(
         store.recommended_reservation(&invocation, ByteSize::ZERO)? >= ByteSize::from_bytes(512)
