@@ -112,6 +112,9 @@ pub enum StoreError {
         /// Number of plausible owned entries requiring attention.
         count: u64,
     },
+    /// The bounded reservation estimate is corrupt or belongs to another store.
+    #[error("reservation profile is invalid or belongs to another store")]
+    InvalidReservationProfile,
     /// A collection policy was invalid.
     #[error(transparent)]
     Policy(#[from] PolicyError),

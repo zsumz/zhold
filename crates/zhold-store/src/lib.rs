@@ -13,6 +13,7 @@ mod layout;
 mod lock;
 mod manifest;
 mod quota;
+mod reservation;
 mod scan;
 mod store;
 mod time;

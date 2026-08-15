@@ -86,6 +86,14 @@ impl StoreLayout {
         self.locks().join("quota.lock")
     }
 
+    pub(crate) fn reservation_profile(&self) -> PathBuf {
+        self.root.join("reservation-profile.json")
+    }
+
+    pub(crate) fn reservation_lock(&self) -> PathBuf {
+        self.locks().join("reservation.lock")
+    }
+
     pub(crate) fn arena(&self, id: &ArenaId) -> PathBuf {
         self.arenas().join(prefix(id)).join(id.as_str())
     }

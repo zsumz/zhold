@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::identity::stable_digest;
 
 /// Bounded classification of a managed Cargo command.
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CargoCommandClass {
     /// `cargo build`.

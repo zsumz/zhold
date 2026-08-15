@@ -30,8 +30,11 @@ impl Store {
         let finished_seconds = unix_seconds()?;
         let finished_at = unix_milliseconds()?;
         let reservation = manifest.reservation;
+        let command_class = manifest.command.command_class;
         manifest.finish(outcome, peak, final_bytes, finished_seconds);
         write_json(&manifest_path, &manifest)?;
+        let observed_growth = std::cmp::max(peak, final_bytes).saturating_sub(initial_bytes);
+        self.record_reservation_growth(command_class, observed_growth)?;
         Ok(HistoryDraft::build(
             BuildReceipt {
                 arena_id: manifest.arena_id,
@@ -39,6 +42,7 @@ impl Store {
                 worktree_id: manifest.worktree_id,
                 workspace_id: manifest.workspace_id,
                 toolchain_id: manifest.toolchain_id,
+                command_class,
                 started_at,
                 finished_at,
                 elapsed_milliseconds: finished_at.saturating_sub(started_at),

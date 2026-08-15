@@ -3,8 +3,9 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use zhold_core::{
-    ArenaId, BuildOutcome, ByteSize, HistoryKind, HookEvent, HookResult, QuotaHealth,
-    QuotaProvider, RepositoryId, ToolchainId, WorkspaceId, WorktreeId, WorktreeIntegrationState,
+    ArenaId, BuildOutcome, ByteSize, CargoCommandClass, HistoryKind, HookEvent, HookResult,
+    QuotaHealth, QuotaProvider, RepositoryId, ToolchainId, WorkspaceId, WorktreeId,
+    WorktreeIntegrationState,
 };
 
 /// Immutable versioned evidence for one committed operation outcome.
@@ -65,6 +66,9 @@ pub struct BuildReceipt {
     pub workspace_id: WorkspaceId,
     /// Stable toolchain identity.
     pub toolchain_id: ToolchainId,
+    /// Privacy-bounded Cargo command classification.
+    #[serde(default)]
+    pub command_class: CargoCommandClass,
     /// Sentinel start time as Unix milliseconds.
     pub started_at: u64,
     /// Finalization time as Unix milliseconds.

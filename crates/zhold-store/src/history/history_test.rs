@@ -1,7 +1,9 @@
 use std::{fs, sync::Arc, thread};
 
 use tempfile::tempdir;
-use zhold_core::{BuildOutcome, ByteSize, CollectionPolicy, HistoryKind, HistoryPolicy};
+use zhold_core::{
+    BuildOutcome, ByteSize, CargoCommandClass, CollectionPolicy, HistoryKind, HistoryPolicy,
+};
 
 use super::{HistoryPayload, HistoryPruneRequest, HistoryQuery};
 use crate::{CargoInvocation, Store, io::read_json, manifest::ArenaManifest, test_support};
@@ -37,6 +39,7 @@ fn completed_build_publishes_a_private_peak_receipt() -> Result<(), Box<dyn std:
     };
     assert_eq!(build.observed_peak, ByteSize::from_bytes(300));
     assert_eq!(build.reservation, ByteSize::from_bytes(400));
+    assert_eq!(build.command_class, CargoCommandClass::Check);
     assert!(build.warning_threshold_exceeded);
     let encoded = serde_json::to_string(&report)?;
     assert!(!encoded.contains("secret-value"));
