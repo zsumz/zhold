@@ -1,6 +1,6 @@
 use std::{fs, path::Path};
 
-use zhold_core::{ArenaRecord, ArenaState, ByteSize, SizeQuality};
+use zhold_core::{ArenaLiveness, ArenaRecord, ArenaState, ByteSize, SizeQuality};
 
 use super::uncertainty::{indexed_arena_id, recover_active_reservation};
 use super::{InventoryEntry, InventoryFinding};
@@ -78,7 +78,7 @@ pub(crate) fn read_arena_snapshot(
         .filter(|entry| {
             matches!(
                 entry.record.state(),
-                ArenaState::Active | ArenaState::Pinned
+                ArenaState::Active | ArenaState::Suspect | ArenaState::Pinned
             ) || matches!(
                 entry.record.size_quality,
                 SizeQuality::Stale | SizeQuality::Unknown
@@ -89,7 +89,7 @@ pub(crate) fn read_arena_snapshot(
         });
     let reserved = arenas
         .iter()
-        .filter(|entry| entry.record.active)
+        .filter(|entry| !matches!(entry.record.liveness, ArenaLiveness::Inactive))
         .fold(recovered_reservations, |sum, entry| {
             sum.saturating_add(entry.reservation)
         });
@@ -183,6 +183,7 @@ fn read_entry(
         ExclusiveFileLock::probe(&layout.arena_lock(&arena_id))?,
         LockState::Held
     );
+    let unfinished = manifest.is_unfinished();
     let (size, size_quality, finding) = observed_size(arena_path, &manifest, measurement);
     let pinned = manifest.is_pinned_at(observed_at);
     let integration =
@@ -204,7 +205,13 @@ fn read_entry(
                 size_quality,
                 created_at: manifest.created_at,
                 last_used_at: manifest.last_used_at,
-                active,
+                liveness: if active {
+                    ArenaLiveness::Active
+                } else if unfinished {
+                    ArenaLiveness::Suspect
+                } else {
+                    ArenaLiveness::Inactive
+                },
                 pinned,
                 worktree_exists: manifest.worktree_root.is_dir(),
                 last_outcome: manifest.last_outcome,
@@ -214,7 +221,7 @@ fn read_entry(
             head: manifest.head,
             cargo_version: manifest.cargo_version,
             command: manifest.command,
-            reservation: if active {
+            reservation: if active || unfinished {
                 manifest.reservation
             } else {
                 ByteSize::ZERO

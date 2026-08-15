@@ -31,9 +31,15 @@ mod platform {
     impl PlatformSupervisor {
         pub(super) fn spawn(command: &mut Command) -> io::Result<Self> {
             let signals = Signals::new([SIGINT, SIGTERM, SIGHUP, SIGQUIT])?;
-            let child = command.group_spawn()?;
-            let group = process_group(child.id())?;
-            let forwarder = SignalForwarder::spawn(signals, group)?;
+            let mut child = command.group_spawn()?;
+            let group = match process_group(child.id()) {
+                Ok(group) => group,
+                Err(error) => return cleanup_failed_spawn(&mut child, error),
+            };
+            let forwarder = match SignalForwarder::spawn(signals, group) {
+                Ok(forwarder) => forwarder,
+                Err(error) => return cleanup_failed_spawn(&mut child, error),
+            };
             Ok(Self {
                 child,
                 group,
@@ -66,6 +72,15 @@ mod platform {
             }
             self.forwarder.stop()
         }
+    }
+
+    fn cleanup_failed_spawn(
+        child: &mut GroupChild,
+        setup_error: io::Error,
+    ) -> io::Result<PlatformSupervisor> {
+        let _kill = child.kill();
+        let _wait = child.wait();
+        Err(setup_error)
     }
 
     #[derive(Debug)]

@@ -78,6 +78,34 @@ fn dropped_lease_records_a_terminated_run() -> Result<(), Box<dyn std::error::Er
 }
 
 #[test]
+fn refuses_to_reuse_an_unfinished_arena_without_a_live_lease()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let project = tempdir()?;
+    let store = Store::open(temporary.path())?;
+    let context = context(project.path())?;
+    let invocation = invocation(project.path())?;
+    store
+        .lease(&context, &invocation)?
+        .finish(BuildOutcome::Succeeded)?;
+    let manifest_path = store.layout.manifest(context.arena_id());
+    let mut manifest: ArenaManifest = read_json(&manifest_path)?;
+    manifest.last_started_at = Some(manifest.last_used_at.saturating_add(1));
+    manifest.last_finished_at = None;
+    manifest.reservation = zhold_core::ByteSize::from_bytes(4096);
+    crate::io::write_json(&manifest_path, &manifest)?;
+
+    let inventory = store.inventory()?;
+    assert_eq!(inventory.arenas[0].record.state(), ArenaState::Suspect);
+    assert_eq!(inventory.reserved, manifest.reservation);
+    assert!(matches!(
+        store.lease(&context, &invocation),
+        Err(crate::StoreError::ArenaSuspect(_))
+    ));
+    Ok(())
+}
+
+#[test]
 fn expired_pins_stop_protecting_an_arena() -> Result<(), Box<dyn std::error::Error>> {
     let temporary = tempdir()?;
     let project = tempdir()?;

@@ -46,6 +46,9 @@ pub(super) fn execute(
 fn explanation(entry: &InventoryEntry, state: ArenaState, observed_at: u64) -> String {
     match state {
         ArenaState::Active => "protected by a live operating-system lease".to_owned(),
+        ArenaState::Suspect => {
+            "protected because its build is unfinished and no live lease can be proven".to_owned()
+        }
         ArenaState::Pinned => entry.pin_expires_at.map_or_else(
             || "protected by a permanent user pin".to_owned(),
             |expires| format!("protected by a user pin until Unix {expires}"),

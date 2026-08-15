@@ -27,6 +27,7 @@ pub(crate) fn explain(report: &ArenaExplanation, format: OutputFormat) -> Result
 const fn state_name(state: zhold_core::ArenaState) -> &'static str {
     match state {
         zhold_core::ArenaState::Active => "active",
+        zhold_core::ArenaState::Suspect => "suspect",
         zhold_core::ArenaState::Pinned => "pinned",
         zhold_core::ArenaState::Orphaned => "orphaned",
         zhold_core::ArenaState::Idle => "idle",

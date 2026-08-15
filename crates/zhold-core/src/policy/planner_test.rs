@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
 use crate::{
-    ArenaId, ArenaRecord, BuildOutcome, ByteSize, CollectionPolicy, EvictionReason, RepositoryId,
-    ToolchainId, WorkspaceId, WorktreeId,
+    ArenaId, ArenaLiveness, ArenaRecord, BuildOutcome, ByteSize, CollectionPolicy, EvictionReason,
+    RepositoryId, ToolchainId, WorkspaceId, WorktreeId,
 };
 
 use super::{plan_collection, plan_collection_with_reservation};
@@ -12,7 +12,7 @@ struct RecordSpec<'a> {
     key: &'a str,
     bytes: u64,
     last_used_at: u64,
-    active: bool,
+    liveness: ArenaLiveness,
     pinned: bool,
     worktree_exists: bool,
     last_outcome: Option<BuildOutcome>,
@@ -24,7 +24,7 @@ impl<'a> RecordSpec<'a> {
             key,
             bytes,
             last_used_at,
-            active: false,
+            liveness: ArenaLiveness::Inactive,
             pinned: false,
             worktree_exists: true,
             last_outcome: None,
@@ -32,12 +32,17 @@ impl<'a> RecordSpec<'a> {
     }
 
     const fn active(mut self) -> Self {
-        self.active = true;
+        self.liveness = ArenaLiveness::Active;
         self
     }
 
     const fn pinned(mut self) -> Self {
         self.pinned = true;
+        self
+    }
+
+    const fn suspect(mut self) -> Self {
+        self.liveness = ArenaLiveness::Suspect;
         self
     }
 
@@ -70,6 +75,25 @@ fn protects_active_and_pinned_arenas() -> Result<(), Box<dyn std::error::Error>>
     assert!(plan.evictions.is_empty());
     assert!(!plan.budget_met);
     assert_eq!(plan.protected, ByteSize::from_bytes(110));
+    Ok(())
+}
+
+#[test]
+fn protects_an_unfinished_arena_after_its_lease_disappears()
+-> Result<(), Box<dyn std::error::Error>> {
+    let suspect = record(RecordSpec::idle("suspect", 70, 1).suspect());
+
+    let plan = plan_collection(
+        &[suspect],
+        CollectionPolicy {
+            budget: ByteSize::from_bytes(1),
+            low_watermark_percent: 100,
+        },
+    )?;
+
+    assert!(plan.evictions.is_empty());
+    assert!(!plan.budget_met);
+    assert_eq!(plan.protected, ByteSize::from_bytes(70));
     Ok(())
 }
 
@@ -179,7 +203,7 @@ fn record(spec: RecordSpec<'_>) -> ArenaRecord {
         size_quality: crate::SizeQuality::Fresh,
         created_at: 1,
         last_used_at: spec.last_used_at,
-        active: spec.active,
+        liveness: spec.liveness,
         pinned: spec.pinned,
         worktree_exists: spec.worktree_exists,
         last_outcome: spec.last_outcome,

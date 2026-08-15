@@ -85,6 +85,11 @@ pub enum StoreError {
     /// An arena could not be changed because a build currently holds its lease.
     #[error("managed arena `{0}` currently has an active build lease")]
     ArenaActive(String),
+    /// An arena has an unfinished command but no provably live lease.
+    #[error(
+        "managed arena `{0}` has an unfinished build with no live lease; recover it explicitly before reuse"
+    )]
+    ArenaSuspect(String),
     /// A registered worktree lifecycle state denies new builds.
     #[error("worktree admission is blocked for `{path}`: {state}")]
     WorktreeAdmissionBlocked {

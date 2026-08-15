@@ -12,6 +12,13 @@ use tempfile::tempdir;
 use zhold_core::{ArenaState, BuildOutcome};
 use zhold_store::Store;
 
+#[cfg(unix)]
+use nix::{
+    errno::Errno,
+    sys::signal::{Signal, kill, killpg},
+    unistd::Pid,
+};
+
 #[test]
 fn cargo_build_separates_intermediates_and_final_output() -> Result<(), Box<dyn std::error::Error>>
 {
@@ -154,6 +161,53 @@ fn lease_sentinel_survives_front_process_termination() -> Result<(), Box<dyn std
     Ok(())
 }
 
+#[cfg(unix)]
+#[test]
+fn sentinel_death_keeps_a_live_cargo_arena_suspect_and_uncollectible()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let project = temporary.path().join("project");
+    let store_root = temporary.path().join("store");
+    let release = temporary.path().join("release-build");
+    create_project(&project, BuildScript::Wait)?;
+
+    let mut front = zhold_command(&project, &store_root, &["cargo", "check"])
+        .env("ZHOLD_TEST_RELEASE", &release)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()?;
+    wait_for_state(&store_root, ArenaState::Active, Duration::from_secs(20))?;
+    let sentinel = wait_for_child_process(front.id(), Duration::from_secs(20))?;
+    let cargo = wait_for_child_process(sentinel, Duration::from_secs(20))?;
+
+    kill(process_id(sentinel)?, Signal::SIGKILL)?;
+    let _front_status = front.wait()?;
+    wait_for_state(&store_root, ArenaState::Suspect, Duration::from_secs(20))?;
+    let cargo_survived = process_is_alive(cargo)?;
+    let gc = zhold(&project, &store_root, &["gc", "1B"])?;
+    let inventory = Store::open(&store_root)?.inventory()?;
+
+    fs::write(&release, b"continue")?;
+    if wait_for_process_exit(cargo, Duration::from_secs(20)).is_err() {
+        let _cleanup = killpg(process_id(cargo)?, Signal::SIGKILL);
+        return Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            "orphaned Cargo process group did not terminate",
+        )
+        .into());
+    }
+
+    assert!(
+        cargo_survived,
+        "Cargo exited when only its sentinel was killed"
+    );
+    assert_eq!(gc.status.code(), Some(2));
+    assert_eq!(inventory.arenas.len(), 1);
+    assert_eq!(inventory.arenas[0].record.state(), ArenaState::Suspect);
+    assert!(inventory.reserved > zhold_core::ByteSize::ZERO);
+    Ok(())
+}
+
 #[derive(Clone, Copy, Debug)]
 enum BuildScript {
     None,
@@ -231,6 +285,83 @@ fn wait_for_state(store: &Path, expected: ArenaState, timeout: Duration) -> Resu
         io::ErrorKind::TimedOut,
         format!("arena did not reach {expected:?}"),
     ))
+}
+
+#[cfg(unix)]
+fn wait_for_child_process(parent: u32, timeout: Duration) -> Result<u32, io::Error> {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        if let Some(child) = child_processes()?
+            .into_iter()
+            .find_map(|(pid, ppid)| (ppid == parent).then_some(pid))
+        {
+            return Ok(child);
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    Err(io::Error::new(
+        io::ErrorKind::TimedOut,
+        format!("process {parent} did not spawn a child"),
+    ))
+}
+
+#[cfg(unix)]
+fn child_processes() -> Result<Vec<(u32, u32)>, io::Error> {
+    let output = Command::new("ps").args(["-axo", "pid=,ppid="]).output()?;
+    if !output.status.success() {
+        return Err(io::Error::other(
+            "ps failed while inspecting the process tree",
+        ));
+    }
+    String::from_utf8(output.stdout)
+        .map_err(io::Error::other)?
+        .lines()
+        .map(|line| {
+            let mut fields = line.split_whitespace();
+            let pid = fields
+                .next()
+                .ok_or_else(|| io::Error::other("ps omitted a process ID"))?
+                .parse()
+                .map_err(io::Error::other)?;
+            let parent = fields
+                .next()
+                .ok_or_else(|| io::Error::other("ps omitted a parent process ID"))?
+                .parse()
+                .map_err(io::Error::other)?;
+            Ok((pid, parent))
+        })
+        .collect()
+}
+
+#[cfg(unix)]
+fn wait_for_process_exit(pid: u32, timeout: Duration) -> Result<(), io::Error> {
+    let deadline = Instant::now() + timeout;
+    while Instant::now() < deadline {
+        if !process_is_alive(pid)? {
+            return Ok(());
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    Err(io::Error::new(
+        io::ErrorKind::TimedOut,
+        format!("process {pid} remained alive"),
+    ))
+}
+
+#[cfg(unix)]
+fn process_is_alive(pid: u32) -> Result<bool, io::Error> {
+    match kill(process_id(pid)?, None) {
+        Ok(()) | Err(Errno::EPERM) => Ok(true),
+        Err(Errno::ESRCH) => Ok(false),
+        Err(error) => Err(io::Error::from_raw_os_error(error as i32)),
+    }
+}
+
+#[cfg(unix)]
+fn process_id(pid: u32) -> Result<Pid, io::Error> {
+    i32::try_from(pid)
+        .map(Pid::from_raw)
+        .map_err(|_| io::Error::other("process identifier exceeds i32"))
 }
 
 fn only_state(store: &Path) -> Result<ArenaState, io::Error> {

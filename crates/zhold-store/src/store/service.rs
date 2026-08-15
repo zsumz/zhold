@@ -174,6 +174,9 @@ impl Store {
             manifest.validate_context(context, manifest_path.clone())?;
             manifest
         };
+        if manifest.is_unfinished() {
+            return Err(StoreError::ArenaSuspect(id.to_string()));
+        }
         manifest.begin(context, command, reservation, now);
         if created {
             if !create_json(&manifest_path, &manifest)? {

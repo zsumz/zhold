@@ -42,8 +42,10 @@ pub fn plan_collection_with_reservation(
     let protected = records
         .iter()
         .filter(|record| {
-            matches!(record.state(), ArenaState::Active | ArenaState::Pinned)
-                || !trusted_size(record.size_quality)
+            matches!(
+                record.state(),
+                ArenaState::Active | ArenaState::Suspect | ArenaState::Pinned
+            ) || !trusted_size(record.size_quality)
         })
         .fold(ByteSize::ZERO, |total, record| {
             total.saturating_add(record.size)

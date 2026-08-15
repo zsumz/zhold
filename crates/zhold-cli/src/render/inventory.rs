@@ -113,6 +113,7 @@ pub(crate) fn inventory(inventory: &Inventory, format: OutputFormat) -> Result<(
 fn state_name(state: ArenaState) -> &'static str {
     match state {
         ArenaState::Active => "active",
+        ArenaState::Suspect => "suspect",
         ArenaState::Pinned => "pinned",
         ArenaState::Orphaned => "orphaned",
         ArenaState::Idle => "idle",

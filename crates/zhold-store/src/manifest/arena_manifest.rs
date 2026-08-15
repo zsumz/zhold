@@ -215,6 +215,10 @@ impl ArenaManifest {
                 .is_none_or(|expires_at| expires_at > now)
     }
 
+    pub(crate) const fn is_unfinished(&self) -> bool {
+        self.last_started_at.is_some() && self.last_finished_at.is_none()
+    }
+
     pub(crate) fn prepare_retirement(&mut self, retirement_id: Uuid) {
         self.schema_version = ARENA_SCHEMA_VERSION;
         self.revision = self.revision.saturating_add(1);

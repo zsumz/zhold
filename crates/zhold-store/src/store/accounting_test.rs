@@ -17,7 +17,10 @@ fn lease_is_authoritative_for_inventory_and_collection() -> Result<(), Box<dyn s
 
     let active = store.inventory()?;
     assert_eq!(active.arenas.len(), 1);
-    assert!(active.arenas[0].record.active);
+    assert_eq!(
+        active.arenas[0].record.liveness,
+        zhold_core::ArenaLiveness::Active
+    );
 
     let blocked = store.collect(CollectionPolicy::new(ByteSize::from_bytes(1)), false)?;
     assert!(blocked.retirements.is_empty());
