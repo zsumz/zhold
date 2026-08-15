@@ -1,4 +1,6 @@
-# zhold
+<p align="center">
+  <img src="./zhold-logo.svg" alt="zhold" width="720">
+</p>
 
 <p align="center"><strong>Bounded Cargo build storage for parallel Git worktrees.</strong></p>
 
