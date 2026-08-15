@@ -39,7 +39,7 @@ impl ExclusiveFileLock {
         let file = open_lock_file(path)?;
         match FileExt::try_lock_exclusive(&file) {
             Ok(()) => Ok(Some(Self { _file: file })),
-            Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(None),
+            Err(error) if is_lock_contention(&error) => Ok(None),
             Err(error) => Err(StoreError::io("probe lock", path, error)),
         }
     }
@@ -50,6 +50,22 @@ impl ExclusiveFileLock {
             None => LockState::Held,
         })
     }
+}
+
+fn is_lock_contention(error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::WouldBlock || platform_lock_contention(error)
+}
+
+#[cfg(windows)]
+fn platform_lock_contention(error: &io::Error) -> bool {
+    const ERROR_LOCK_VIOLATION: i32 = 33;
+
+    error.raw_os_error() == Some(ERROR_LOCK_VIOLATION)
+}
+
+#[cfg(not(windows))]
+fn platform_lock_contention(_error: &io::Error) -> bool {
+    false
 }
 
 impl SharedFileLock {

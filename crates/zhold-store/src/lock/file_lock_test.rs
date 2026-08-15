@@ -16,6 +16,15 @@ const READY_PATH: &str = "ZHOLD_READY_PATH";
 const RELEASE_PATH: &str = "ZHOLD_RELEASE_PATH";
 
 #[test]
+fn same_process_probe_observes_a_held_lock() -> Result<(), Box<dyn std::error::Error>> {
+    let fixture = Fixture::create()?;
+    let _held = ExclusiveFileLock::acquire(&fixture.lock)?;
+
+    assert_eq!(ExclusiveFileLock::probe(&fixture.lock)?, LockState::Held);
+    Ok(())
+}
+
+#[test]
 fn another_process_makes_the_lock_authoritatively_held() -> Result<(), Box<dyn std::error::Error>> {
     let fixture = Fixture::create()?;
     let mut child = fixture.spawn()?;
