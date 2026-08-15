@@ -14,7 +14,7 @@ use crate::{
     ScanReport, StoreError,
     collection::collect_locked,
     history::{CollectionReceiptSource, HistoryDraft},
-    inventory::read_inventory,
+    inventory::{ArenaMeasurement, read_arena_snapshot, read_inventory},
     io::{create_json, read_json, write_json},
     layout::StoreLayout,
     lock::ExclusiveFileLock,
@@ -120,7 +120,8 @@ impl Store {
         let lease =
             self.lease_reserved_locked(context, invocation, reservation, (arena_lock, worktree))?;
         if self.has_adopted_quota()? {
-            let aggregate_reservation = read_inventory(self)?.reserved;
+            let aggregate_reservation =
+                read_arena_snapshot(self, ArenaMeasurement::Cached)?.reserved;
             self.verify_quota_admission(aggregate_reservation)?;
         }
         Ok(lease)
@@ -139,7 +140,7 @@ impl Store {
         let (_collection_lock, arena_lock) = self.admission_locks(id)?;
         let mut lease =
             self.lease_reserved_locked(context, invocation, reservation, (arena_lock, worktree))?;
-        let report = collect_locked(self, policy, false)?;
+        let report = collect_locked(self, policy, false, ArenaMeasurement::Cached)?;
         self.verify_quota_admission(report.reserved)?;
         lease.queue_history(HistoryDraft::collection(
             &report,
@@ -185,6 +186,8 @@ impl Store {
             write_json(&manifest_path, &manifest)?;
         }
         let initial_bytes = crate::io::measure_tree(&arena)?;
+        manifest.observe_size(initial_bytes);
+        write_json(&manifest_path, &manifest)?;
         Ok(ArenaLease::new(
             self.clone(),
             context.arena_id().clone(),

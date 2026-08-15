@@ -204,3 +204,21 @@ fn uncertain_sizes_are_protected_and_fail_admission_closed()
     assert!(!plan.budget_met);
     Ok(())
 }
+
+#[test]
+fn durable_cached_sizes_are_trusted_for_collection() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cached = record(RecordSpec::idle("cached", 30, 1));
+    cached.size_quality = crate::SizeQuality::Cached;
+    let plan = plan_collection(
+        &[cached],
+        CollectionPolicy {
+            budget: ByteSize::from_bytes(20),
+            low_watermark_percent: 100,
+        },
+    )?;
+
+    assert_eq!(plan.evictions.len(), 1);
+    assert_eq!(plan.protected, ByteSize::ZERO);
+    assert!(plan.budget_met);
+    Ok(())
+}

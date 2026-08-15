@@ -6,7 +6,7 @@ use zhold_core::{ByteSize, CollectionPolicy, EvictionReason, plan_collection_wit
 use super::{CollectionReport, CollectionSkip, Retirement, RetirementDisposition};
 use crate::{
     Store, StoreError,
-    inventory::ensure_real_contained_directory,
+    inventory::{ArenaMeasurement, ensure_real_contained_directory, read_arena_snapshot},
     io::{measure_tree, read_json, remove_tree, write_json},
     lock::ExclusiveFileLock,
     manifest::ArenaManifest,
@@ -16,17 +16,19 @@ pub(crate) fn collect(
     store: &Store,
     policy: CollectionPolicy,
     dry_run: bool,
+    measurement: ArenaMeasurement,
 ) -> Result<CollectionReport, StoreError> {
     let _collection_lock = ExclusiveFileLock::acquire(&store.layout.collection_lock())?;
-    collect_locked(store, policy, dry_run)
+    collect_locked(store, policy, dry_run, measurement)
 }
 
 pub(crate) fn collect_locked(
     store: &Store,
     policy: CollectionPolicy,
     dry_run: bool,
+    measurement: ArenaMeasurement,
 ) -> Result<CollectionReport, StoreError> {
-    let inventory = store.inventory()?;
+    let inventory = read_arena_snapshot(store, measurement)?;
     if inventory.uncertain_owned > 0 {
         return Err(StoreError::InventoryUncertain {
             count: inventory.uncertain_owned,
@@ -84,7 +86,7 @@ pub(crate) fn collect_locked(
         }
     }
     let (_retired, reclaimed) = accounted_bytes(&retirements);
-    let confirmed = store.inventory()?;
+    let confirmed = read_arena_snapshot(store, measurement)?;
     let after = confirmed.total;
     Ok(CollectionReport {
         dry_run,

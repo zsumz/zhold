@@ -4,6 +4,7 @@ use crate::{
     CollectionReport, Store, StoreError, TrashReport,
     collection::{collect, retry_trash},
     history::{CollectionReceiptSource, HistoryDraft, persist},
+    inventory::ArenaMeasurement,
 };
 
 impl Store {
@@ -13,7 +14,7 @@ impl Store {
         policy: CollectionPolicy,
         dry_run: bool,
     ) -> Result<CollectionReport, StoreError> {
-        let mut report = collect(self, policy, dry_run)?;
+        let mut report = collect(self, policy, dry_run, ArenaMeasurement::Deep)?;
         if !dry_run {
             report.history = persist(
                 self,
@@ -28,7 +29,7 @@ impl Store {
         &self,
         policy: CollectionPolicy,
     ) -> Result<CollectionReport, StoreError> {
-        let mut report = collect(self, policy, false)?;
+        let mut report = collect(self, policy, false, ArenaMeasurement::Cached)?;
         report.history = persist(
             self,
             HistoryDraft::collection(&report, CollectionReceiptSource::PostBuild),

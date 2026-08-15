@@ -197,6 +197,11 @@ impl ArenaManifest {
         self.last_known_size = final_bytes;
     }
 
+    pub(crate) fn observe_size(&mut self, size: ByteSize) {
+        self.schema_version = ARENA_SCHEMA_VERSION;
+        self.last_known_size = size;
+    }
+
     pub(crate) fn set_pin(&mut self, pinned: bool, expires_at: Option<u64>) {
         let expires_at = if pinned { expires_at } else { None };
         if self.pinned != pinned || self.pin_expires_at != expires_at {

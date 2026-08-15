@@ -2,6 +2,7 @@ use std::fs;
 
 use crate::{
     Store,
+    inventory::{ArenaMeasurement, read_arena_snapshot},
     io::{read_json, write_json},
     manifest::ArenaManifest,
     test_support::create_idle_arena,
@@ -95,5 +96,30 @@ fn a_stale_reservation_without_a_live_lease_is_inactive() -> Result<(), Box<dyn 
 
     assert_eq!(inventory.reserved, zhold_core::ByteSize::ZERO);
     assert_eq!(inventory.arenas[0].reservation, zhold_core::ByteSize::ZERO);
+    Ok(())
+}
+
+#[test]
+fn distinguishes_cached_admission_sizes_from_deep_measurements()
+-> Result<(), Box<dyn std::error::Error>> {
+    let store_root = tempdir()?;
+    let project = tempdir()?;
+    let store = Store::open(store_root.path())?;
+    create_idle_arena(&store, project.path(), 4_096)?;
+
+    let cached = read_arena_snapshot(&store, ArenaMeasurement::Cached)?;
+    let deep = read_arena_snapshot(&store, ArenaMeasurement::Deep)?;
+
+    assert_eq!(cached.arenas.len(), 1);
+    assert_eq!(
+        cached.arenas[0].record.size_quality,
+        zhold_core::SizeQuality::Cached
+    );
+    assert_eq!(
+        deep.arenas[0].record.size_quality,
+        zhold_core::SizeQuality::Fresh
+    );
+    assert_eq!(cached.uncertain_owned, 0);
+    assert!(cached.total > zhold_core::ByteSize::ZERO);
     Ok(())
 }

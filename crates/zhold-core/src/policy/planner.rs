@@ -38,12 +38,12 @@ pub fn plan_collection_with_reservation(
     });
     let uncertain = records
         .iter()
-        .any(|record| record.size_quality != SizeQuality::Fresh);
+        .any(|record| !trusted_size(record.size_quality));
     let protected = records
         .iter()
         .filter(|record| {
             matches!(record.state(), ArenaState::Active | ArenaState::Pinned)
-                || record.size_quality != SizeQuality::Fresh
+                || !trusted_size(record.size_quality)
         })
         .fold(ByteSize::ZERO, |total, record| {
             total.saturating_add(record.size)
@@ -69,7 +69,7 @@ pub fn plan_collection_with_reservation(
     let mut candidates = records
         .iter()
         .filter(|record| {
-            record.size_quality == SizeQuality::Fresh
+            trusted_size(record.size_quality)
                 && matches!(record.state(), ArenaState::Orphaned | ArenaState::Idle)
         })
         .collect::<Vec<_>>();
@@ -106,6 +106,10 @@ pub fn plan_collection_with_reservation(
         evictions,
         budget_met: !uncertain && projected <= admission_budget,
     })
+}
+
+const fn trusted_size(quality: SizeQuality) -> bool {
+    matches!(quality, SizeQuality::Fresh | SizeQuality::Cached)
 }
 
 const fn priority(record: &ArenaRecord) -> u8 {

@@ -37,6 +37,8 @@ pub enum SizeQuality {
     /// The arena tree was measured successfully in this snapshot.
     #[default]
     Fresh,
+    /// Durable size from the most recent completed managed transition.
+    Cached,
     /// Current measurement failed, so the last durable successful size is used.
     Stale,
     /// No trustworthy byte count is available.
