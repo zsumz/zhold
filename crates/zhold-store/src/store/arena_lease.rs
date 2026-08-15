@@ -7,6 +7,7 @@ use crate::{
     history::{HistoryDraft, persist},
     io::measure_tree,
     lock::ExclusiveFileLock,
+    store::initialization::ensure_managed_directory,
     worktree::WorktreeAdmission,
 };
 
@@ -100,6 +101,7 @@ impl ArenaLease {
         outcome: BuildOutcome,
         high_water_observation: ByteSize,
     ) -> Result<BuildFinalization, StoreError> {
+        ensure_managed_directory(self.store.layout.root(), &self.build_dir)?;
         let final_bytes = self.measure().ok();
         let integration = self
             .worktree
@@ -158,6 +160,10 @@ impl Drop for ArenaLease {
             return;
         }
         self.finished = true;
+        if ensure_managed_directory(self.store.layout.root(), &self.build_dir).is_err() {
+            self.release_locks();
+            return;
+        }
         let final_bytes = self.measure().ok();
         let integration = self
             .worktree

@@ -133,6 +133,36 @@ fn short_gc_syntax_produces_a_non_mutating_plan() -> Result<(), Box<dyn std::err
 }
 
 #[test]
+fn cargo_clean_leaves_an_inventoryable_and_retirable_arena()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let project = temporary.path().join("project");
+    let store_root = temporary.path().join("store");
+    create_project(&project, BuildScript::None)?;
+    assert!(
+        zhold(&project, &store_root, &["cargo", "build"])?
+            .status
+            .success()
+    );
+
+    let clean = zhold(&project, &store_root, &["cargo", "clean"])?;
+    let inventory = Store::open(&store_root)?.inventory()?;
+    let collection = zhold(&project, &store_root, &["gc", "1B"])?;
+
+    assert!(
+        clean.status.success(),
+        "zhold cargo clean failed: {}",
+        String::from_utf8_lossy(&clean.stderr)
+    );
+    assert_eq!(inventory.uncertain_owned, 0);
+    assert_eq!(inventory.arenas.len(), 1);
+    assert_eq!(inventory.arenas[0].record.state(), ArenaState::Idle);
+    assert!(collection.status.success());
+    assert!(Store::open(&store_root)?.inventory()?.arenas.is_empty());
+    Ok(())
+}
+
+#[test]
 fn lease_sentinel_survives_front_process_termination() -> Result<(), Box<dyn std::error::Error>> {
     let temporary = tempdir()?;
     let project = temporary.path().join("project");
