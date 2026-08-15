@@ -15,8 +15,24 @@ use crate::{
     test_support::create_idle_arena,
 };
 
-use super::collector::{RetirementAttempt, accounted_bytes, retire};
+use super::collector::{RetirementAttempt, accounted_bytes, budget_is_confirmed, retire};
 use super::{Retirement, RetirementDisposition};
+
+#[test]
+fn final_uncertainty_prevents_a_confirmed_budget_result() {
+    assert!(!budget_is_confirmed(
+        ByteSize::ZERO,
+        ByteSize::ZERO,
+        1,
+        ByteSize::from_bytes(1),
+    ));
+    assert!(budget_is_confirmed(
+        ByteSize::from_bytes(1),
+        ByteSize::ZERO,
+        0,
+        ByteSize::from_bytes(1),
+    ));
+}
 
 #[test]
 fn pending_trash_leaves_active_storage_but_not_physical_reclamation() {

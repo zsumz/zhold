@@ -95,11 +95,25 @@ pub(crate) fn collect_locked(
         plan,
         reclaimed,
         after,
-        budget_met: after.saturating_add(confirmed.reserved) <= policy.budget,
+        budget_met: budget_is_confirmed(
+            after,
+            confirmed.reserved,
+            confirmed.uncertain_owned,
+            policy.budget,
+        ),
         retirements,
         skipped,
         history: crate::HistoryWrite::default(),
     })
+}
+
+pub(super) fn budget_is_confirmed(
+    total: ByteSize,
+    reserved: ByteSize,
+    uncertain_owned: u64,
+    budget: ByteSize,
+) -> bool {
+    uncertain_owned == 0 && total.saturating_add(reserved) <= budget
 }
 
 pub(super) fn accounted_bytes(retirements: &[Retirement]) -> (ByteSize, ByteSize) {

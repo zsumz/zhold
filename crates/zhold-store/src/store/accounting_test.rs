@@ -108,6 +108,31 @@ fn unreadable_owned_metadata_blocks_collection() -> Result<(), Box<dyn std::erro
 
 #[cfg(unix)]
 #[test]
+fn every_unparseable_object_under_the_arena_root_counts_as_uncertainty()
+-> Result<(), Box<dyn std::error::Error>> {
+    use std::os::unix::fs::symlink;
+
+    let temporary = tempdir()?;
+    let outside = tempdir()?;
+    let store = Store::open(temporary.path())?;
+    let arenas = store.layout.arenas();
+    fs::create_dir_all(arenas.join("bad-prefix/nested"))?;
+    fs::create_dir_all(arenas.join("aa/not-an-arena-id"))?;
+    symlink(outside.path(), arenas.join("bb"))?;
+    fs::write(arenas.join("cc"), b"not a directory")?;
+
+    let inventory = store.inventory()?;
+
+    assert_eq!(inventory.uncertain_owned, 4);
+    assert!(matches!(
+        store.collect(CollectionPolicy::new(ByteSize::from_bytes(1)), false),
+        Err(StoreError::InventoryUncertain { count: 4 })
+    ));
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
 fn active_reservation_survives_build_directory_measurement_failure()
 -> Result<(), Box<dyn std::error::Error>> {
     use std::os::unix::fs::symlink;

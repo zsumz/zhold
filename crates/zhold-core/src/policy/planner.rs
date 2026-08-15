@@ -50,13 +50,12 @@ pub fn plan_collection_with_reservation(
         .fold(ByteSize::ZERO, |total, record| {
             total.saturating_add(record.size)
         });
-    let admission_budget = policy.budget.saturating_sub(reservation);
     let target = policy
         .budget
         .percent(policy.low_watermark_percent)
         .saturating_sub(reservation);
 
-    if before <= admission_budget {
+    if before.saturating_add(reservation) <= policy.budget {
         return Ok(CollectionPlan {
             before,
             target,
@@ -106,7 +105,7 @@ pub fn plan_collection_with_reservation(
         protected,
         reclaimable: before.saturating_sub(projected),
         evictions,
-        budget_met: !uncertain && projected <= admission_budget,
+        budget_met: !uncertain && projected.saturating_add(reservation) <= policy.budget,
     })
 }
 

@@ -46,7 +46,7 @@ pub(crate) fn read_arena_snapshot(
     let mut uncertain_owned = 0_u64;
     let mut recovered_reservations = ByteSize::ZERO;
 
-    for path in arena_paths(layout, &mut findings)? {
+    for path in arena_paths(layout, &mut findings, &mut uncertain_owned)? {
         match read_entry(store, &root, &path, observed_at, measurement) {
             Ok(observation) => {
                 if let Some(finding) = observation.finding {
@@ -56,8 +56,8 @@ pub(crate) fn read_arena_snapshot(
                 arenas.push(observation.entry);
             }
             Err(error) => {
+                uncertain_owned = uncertain_owned.saturating_add(1);
                 if indexed_arena_id(layout, &path).is_some() {
-                    uncertain_owned = uncertain_owned.saturating_add(1);
                     recovered_reservations = recovered_reservations
                         .saturating_add(recover_active_reservation(store, &path));
                 }
@@ -109,6 +109,7 @@ pub(crate) fn read_arena_snapshot(
 fn arena_paths(
     layout: &StoreLayout,
     findings: &mut Vec<InventoryFinding>,
+    uncertain_owned: &mut u64,
 ) -> Result<Vec<std::path::PathBuf>, StoreError> {
     let mut paths = Vec::new();
     let prefixes = fs::read_dir(layout.arenas())
@@ -118,6 +119,7 @@ fn arena_paths(
             prefix.map_err(|error| StoreError::io("read arena prefix", layout.arenas(), error))?;
         let prefix_path = prefix.path();
         if !is_valid_prefix(&prefix_path) {
+            *uncertain_owned = uncertain_owned.saturating_add(1);
             findings.push(InventoryFinding {
                 path: prefix_path,
                 reason: "arena prefix is not two lowercase hexadecimal characters".to_owned(),
@@ -127,6 +129,7 @@ fn arena_paths(
         let metadata = fs::symlink_metadata(&prefix_path)
             .map_err(|error| StoreError::io("inspect arena prefix", &prefix_path, error))?;
         if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            *uncertain_owned = uncertain_owned.saturating_add(1);
             findings.push(InventoryFinding {
                 path: prefix_path,
                 reason: "arena prefix is not a real directory".to_owned(),

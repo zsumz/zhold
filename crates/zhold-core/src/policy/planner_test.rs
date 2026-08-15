@@ -158,6 +158,24 @@ fn reservations_reduce_both_admission_capacity_and_the_total_low_watermark()
 }
 
 #[test]
+fn a_reservation_larger_than_the_budget_fails_with_an_empty_inventory()
+-> Result<(), Box<dyn std::error::Error>> {
+    let plan = plan_collection_with_reservation(
+        &[],
+        CollectionPolicy {
+            budget: ByteSize::from_bytes(100),
+            low_watermark_percent: 80,
+        },
+        ByteSize::from_bytes(120),
+    )?;
+
+    assert_eq!(plan.before, ByteSize::ZERO);
+    assert_eq!(plan.projected, ByteSize::ZERO);
+    assert!(!plan.budget_met);
+    Ok(())
+}
+
+#[test]
 fn deterministic_ties_use_size_then_identity() -> Result<(), Box<dyn std::error::Error>> {
     let large = record(RecordSpec::idle("large", 30, 10));
     let small = record(RecordSpec::idle("small", 10, 10));
