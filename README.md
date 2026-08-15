@@ -4,97 +4,122 @@
 
 <p align="center"><strong>Bounded Cargo build storage for parallel Git worktrees.</strong></p>
 
-zhold gives every Git worktree an isolated Cargo intermediate directory, keeps
-active builds leased, and reclaims only complete storage it can prove it owns.
-It requires no account, daemon, source upload, network request, API key, or LLM.
+zhold gives each physical Git worktree its own reusable Cargo intermediate
+directory, protects running builds with leases, and retires only complete
+storage it can prove it owns. It has no daemon, account, network service, API
+key, source upload, or LLM dependency.
 
-## Install
+This repository is `0.1.0-alpha.1`. The format and command surface can still
+change before the first release candidate.
 
-From this checkout:
+## Start
+
+Install from this checkout with Rust 1.91.1 or newer:
 
 ```sh
 cargo install --path crates/zhold-cli --locked
 ```
 
-This RC is a source-only preview. Its crates are not published to crates.io.
-
-## Use
-
-Set a shared storage budget and run Cargo through zhold:
+Set one durable budget, then use Cargo normally through zhold:
 
 ```sh
-export ZHOLD_BUDGET=100GiB
+zhold setup 200GiB
 zhold cargo test
+zhold
+zhold gc --dry-run
+zhold gc
 ```
 
-Each physical Git worktree receives a distinct arena while compatible runs in
-that worktree reuse the same intermediates. Cargo artifacts requested with
-`--target-dir` remain separate from zhold's managed intermediate storage.
+`zhold` by itself shows the store, arena, reservation, pending-trash, history,
+and filesystem state. A one-off collection budget remains available as
+`zhold gc 100GiB --dry-run`.
 
-Inspect or manage the store:
+Useful core commands:
 
 ```sh
-zhold
 zhold cargo test --workspace
-zhold gc --dry-run
-zhold gc 100GiB
 zhold pin 0123456789 --for 7d
+zhold unpin 0123456789
 zhold explain 0123456789
-zhold history --kind build
+zhold scan ../projects
 zhold doctor
 ```
 
-Coordinate a worktree manager with the optional lifecycle protocol:
+## What zhold bounds
+
+The default is a conservative steady-state arena budget, not an
+operating-system hard quota.
+
+Before Cargo starts, zhold serializes admission, counts every live build
+reservation, collects cold arenas, and checks an optional free-space floor.
+Reservations learn from the command class's historical p95 and previous peak.
+After the complete Cargo process tree exits, zhold finalizes the arena, releases
+its lease, and collects again.
+
+A running build can exceed its estimate. Configure the emergency floor when the
+store shares a filesystem with important data:
 
 ```sh
-zhold hook ready --path . --manager worktrunk
-zhold hook prepare-remove --path . --manager worktrunk
-zhold hook removed --path . --manager worktrunk
+zhold setup 200GiB --min-free 25GiB --build-reserve 2GiB
 ```
 
-If removal fails, restore the ready state with `zhold hook cancel-remove`.
-
-## Quotas
-
-zhold can inspect and adopt an existing dedicated APFS quota, Linux project or
-Btrfs quota, or Windows FSRM quota as an additional refusal boundary:
+Only a successfully adopted OS quota is a hard physical boundary. Quota
+inspection and adoption are experimental and never provision or elevate:
 
 ```sh
+cargo install --path crates/zhold-cli --locked --features experimental
 zhold quota status
-zhold quota plan
-zhold quota adopt
+zhold quota plan 220GiB
+zhold quota adopt 220GiB
 ```
 
-Quota commands never provision quotas, elevate privileges, or weaken the normal
-zhold budget. Adoption succeeds only when the provider identity, scope, hard
-limit, and current usage can be verified exactly.
+The same feature exposes advanced history administration and worktree-manager
+hooks. They remain outside the default alpha command surface.
 
-## Safety
+## Cargo and worktrees
 
-- Collection is deterministic and protects active, pinned, and revalidated arenas.
-- Deletion requires exact ownership, identity, and retirement proofs.
-- Symlinks and substituted directories fail closed instead of being followed.
-- Worktree removal gates block new builds before a manager removes the path.
-- Operational receipts are private, bounded, and never authoritative for deletion.
-- Quota drift blocks admission without changing external filesystem policy.
+Arena identity includes repository, physical worktree, Cargo workspace,
+toolchain, configured compiler, and relevant Cargo configuration. Multiple Cargo
+workspaces in one Git worktree remain distinct. `--manifest-path`, nightly `-C`,
+and `--config` participate in effective invocation discovery.
 
-## Qualification
+zhold appends its managed `build.build-dir` at Cargo's final command-line
+configuration precedence. Cargo's final artifacts remain in the workspace
+target directory; zhold owns only the separate intermediate directory supported
+by Cargo 1.91.
 
-Run the complete offline repository gate with:
+## Safety boundary
+
+- Active and pinned arenas are never collection candidates.
+- Admission fails closed on unknown owned bytes or reservations.
+- Collection rereads identity, revision, pin, lease, and worktree state.
+- Retirement atomically renames a whole arena into owned trash before deletion.
+- Raw Cargo arguments are never persisted.
+- Unix store state is owner-only (`0700` directories, `0600` files).
+- Exit zero means Cargo and zhold lifecycle finalization both succeeded.
+
+zhold protects against crashes, ordinary concurrency, cancellation, malformed
+state, symlinks, and accidental replacement. It does not claim resistance to a
+malicious same-user process actively racing path-based deletion. See
+[Safety and threat model](docs/safety.md) for the exact boundary.
+
+## Reference
+
+- [Design and guarantees](docs/design.md)
+- [Safety and threat model](docs/safety.md)
+- [Store format and migration](docs/store-format.md)
+- [Locking and concurrency](docs/locking.md)
+- [Platform support](docs/platform-support.md)
+- [Release qualification](docs/release-qualification.md)
+
+Run the complete local gate with:
 
 ```sh
 ./scripts/check
 ```
 
-It checks architecture guardrails, formatting, Clippy, tests, rustdoc, and a
-clean diff.
-
-## Status
-
-Version 0.0.1-rc.1 is the initial release candidate. The macOS provider has a
-live discovery smoke test; Linux and Windows providers have strict fixture
-coverage and cross-target warnings-as-errors builds. Privileged enforcement
-qualification belongs on dedicated target-host CI.
+It enforces architecture capabilities, formatting, locked warnings-as-errors
+Clippy, all tests, the default command surface, rustdoc, and a clean worktree.
 
 ## License
 

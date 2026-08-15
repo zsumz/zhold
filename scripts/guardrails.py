@@ -104,8 +104,12 @@ def check_name_contract(checks: Checks) -> None:
         checks.require(legacy not in text.casefold(), f"{relative(path)} contains the legacy name")
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    checks.require("zhold setup 200GiB" in readme, "README must lead with persistent setup")
     checks.require("zhold cargo test" in readme, "README must lead with the simple Cargo path")
-    checks.require("zhold gc 100GiB" in readme, "README must show positional GC budget syntax")
+    checks.require(
+        "zhold gc 100GiB --dry-run" in readme,
+        "README must show positional GC budget syntax",
+    )
 
 
 def check_text_hygiene(checks: Checks, path: Path, text: str) -> None:
