@@ -100,6 +100,22 @@ fn rejects_a_symlink_metadata_file() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(unix)]
+#[test]
+fn tightens_existing_metadata_permissions() -> Result<(), Box<dyn std::error::Error>> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temporary = tempdir()?;
+    let path = temporary.path().join("state.json");
+    let stable = document(3, "stable");
+    create_json(&path, &stable)?;
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o644))?;
+
+    assert_eq!(read_json::<Document>(&path)?, stable);
+    assert_eq!(fs::metadata(path)?.permissions().mode() & 0o777, 0o600);
+    Ok(())
+}
+
 fn document(revision: u64, value: &str) -> Document {
     Document {
         revision,

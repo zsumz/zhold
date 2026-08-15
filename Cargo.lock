@@ -637,6 +637,7 @@ dependencies = [
  "blake3",
  "fs2",
  "libc",
+ "nix",
  "serde",
  "serde_json",
  "tempfile",

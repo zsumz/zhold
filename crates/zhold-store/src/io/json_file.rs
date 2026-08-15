@@ -7,7 +7,10 @@ use std::{
 use serde::{Serialize, de::DeserializeOwned};
 use uuid::Uuid;
 
-use crate::StoreError;
+use crate::{
+    StoreError,
+    io::{configure_private_file, secure_file, secure_open_file},
+};
 
 pub(crate) fn read_json<T: DeserializeOwned>(path: &Path) -> Result<T, StoreError> {
     match read_one(path) {
@@ -29,11 +32,13 @@ pub(crate) fn create_json<T: Serialize>(path: &Path, value: &T) -> Result<bool, 
     validate_existing_file(path)?;
     let temporary = temporary_path(path);
     let bytes = encoded(path, value)?;
-    let mut file = OpenOptions::new()
-        .create_new(true)
-        .write(true)
+    let mut options = OpenOptions::new();
+    options.create_new(true).write(true);
+    configure_private_file(&mut options);
+    let mut file = options
         .open(&temporary)
         .map_err(|error| StoreError::io("create metadata staging file", &temporary, error))?;
+    secure_open_file(&file, &temporary)?;
     write_and_sync(&mut file, &temporary, &bytes)?;
     drop(file);
     match fs::hard_link(&temporary, path) {
@@ -59,11 +64,13 @@ pub(crate) fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), Sto
     validate_existing_file(path)?;
     let temporary = temporary_path(path);
     let bytes = encoded(path, value)?;
-    let mut file = OpenOptions::new()
-        .create_new(true)
-        .write(true)
+    let mut options = OpenOptions::new();
+    options.create_new(true).write(true);
+    configure_private_file(&mut options);
+    let mut file = options
         .open(&temporary)
         .map_err(|error| StoreError::io("create metadata staging file", &temporary, error))?;
+    secure_open_file(&file, &temporary)?;
     write_and_sync(&mut file, &temporary, &bytes)?;
     replace_with_backup(path, &temporary)
 }
@@ -193,7 +200,7 @@ fn validate_existing_file(path: &Path) -> Result<(), StoreError> {
                 reason: "metadata path is not a real file".to_owned(),
             })
         }
-        Ok(_) => Ok(()),
+        Ok(_) => secure_file(path),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(StoreError::io("inspect metadata path", path, error)),
     }
@@ -207,7 +214,10 @@ fn is_real_file(path: &Path) -> Result<bool, StoreError> {
                 reason: "metadata path is not a real file".to_owned(),
             })
         }
-        Ok(_) => Ok(true),
+        Ok(_) => {
+            secure_file(path)?;
+            Ok(true)
+        }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
         Err(error) => Err(StoreError::io("inspect metadata path", path, error)),
     }

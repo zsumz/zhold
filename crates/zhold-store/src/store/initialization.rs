@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::{
     StoreError,
-    io::{create_json, read_json},
+    io::{create_json, read_json, secure_directory},
     layout::StoreLayout,
     manifest::StoreMarker,
 };
@@ -185,6 +185,7 @@ pub(super) fn ensure_managed_directory(root: &Path, path: &Path) -> Result<(), S
             ));
         }
     }
+    secure_directory(path)?;
     let canonical = path
         .canonicalize()
         .map_err(|error| StoreError::io("canonicalize managed store directory", path, error))?;
@@ -208,5 +209,5 @@ pub(super) fn prepare_store_root(path: &Path) -> Result<(), StoreError> {
             reason: "store root is not a real directory".to_owned(),
         });
     }
-    Ok(())
+    secure_directory(path)
 }

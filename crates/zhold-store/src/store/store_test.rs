@@ -145,6 +145,43 @@ fn rejects_a_symlink_store_root() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(unix)]
 #[test]
+fn enforces_owner_only_store_permissions() -> Result<(), Box<dyn std::error::Error>> {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+    let temporary = tempdir()?;
+    fs::set_permissions(temporary.path(), fs::Permissions::from_mode(0o755))?;
+    let project = tempdir()?;
+    let store = Store::open(temporary.path())?;
+    let context = context(project.path())?;
+    let invocation = invocation(project.path())?;
+    let lease = store.lease(&context, &invocation)?;
+    lease.finish(BuildOutcome::Succeeded)?;
+
+    let expected_owner = nix::unistd::Uid::effective().as_raw();
+    for directory in [
+        temporary.path().to_path_buf(),
+        store.layout.arenas(),
+        store.layout.arena(context.arena_id()),
+        store.layout.build_dir(context.arena_id()),
+    ] {
+        let metadata = fs::metadata(directory)?;
+        assert_eq!(metadata.uid(), expected_owner);
+        assert_eq!(metadata.permissions().mode() & 0o777, 0o700);
+    }
+    for file in [
+        store.layout.marker(),
+        store.layout.manifest(context.arena_id()),
+        store.layout.arena_lock(context.arena_id()),
+    ] {
+        let metadata = fs::metadata(file)?;
+        assert_eq!(metadata.uid(), expected_owner);
+        assert_eq!(metadata.permissions().mode() & 0o777, 0o600);
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
 fn rejected_build_substitution_does_not_advance_the_manifest()
 -> Result<(), Box<dyn std::error::Error>> {
     use std::os::unix::fs::symlink;

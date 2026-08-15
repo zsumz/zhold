@@ -24,6 +24,7 @@ zhold-core.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc.workspace = true
+nix.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

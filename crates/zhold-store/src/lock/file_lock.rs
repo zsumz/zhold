@@ -6,7 +6,10 @@ use std::{
 
 use fs2::FileExt;
 
-use crate::StoreError;
+use crate::{
+    StoreError,
+    io::{configure_private_file, secure_open_file},
+};
 
 #[derive(Debug)]
 pub(crate) struct ExclusiveFileLock {
@@ -63,20 +66,12 @@ fn open_lock_file(path: &Path) -> Result<File, StoreError> {
     validate_lock_path(path)?;
     let mut options = OpenOptions::new();
     options.create(true).read(true).write(true).truncate(false);
+    configure_private_file(&mut options);
     configure_no_follow(&mut options);
     let file = options
         .open(path)
         .map_err(|error| StoreError::io("open lock", path, error))?;
-    if !file
-        .metadata()
-        .map_err(|error| StoreError::io("inspect opened lock", path, error))?
-        .is_file()
-    {
-        return Err(StoreError::InvalidOwnership {
-            path: path.to_path_buf(),
-            reason: "lock path is not a real file".to_owned(),
-        });
-    }
+    secure_open_file(&file, path)?;
     Ok(file)
 }
 
