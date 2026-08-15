@@ -7,9 +7,9 @@ use super::{TrashEntry, TrashOutcome, TrashReport};
 use crate::{
     Store, StoreError,
     inventory::ensure_real_contained_directory,
-    io::{measure_tree, read_json, remove_tree},
+    io::{measure_tree, read_json, remove_json, remove_tree},
     lock::ExclusiveFileLock,
-    manifest::ArenaManifest,
+    manifest::RetirementRecord,
 };
 
 pub(crate) fn retry_trash(store: &Store, dry_run: bool) -> Result<TrashReport, StoreError> {
@@ -25,8 +25,8 @@ pub(crate) fn retry_trash(store: &Store, dry_run: bool) -> Result<TrashReport, S
     let mut reclaimed = ByteSize::ZERO;
     let mut entries = Vec::new();
     for path in paths {
-        let attempt = inspect_entry(&path, &trash, &root, store.marker.store_id).and_then(
-            |(arena_id, size)| {
+        let attempt =
+            inspect_entry(store, &path, &trash, &root).and_then(|(arena_id, record_path, size)| {
                 let Some(_arena_lock) =
                     ExclusiveFileLock::try_acquire(&store.layout.arena_lock(&arena_id))?
                 else {
@@ -36,11 +36,11 @@ pub(crate) fn retry_trash(store: &Store, dry_run: bool) -> Result<TrashReport, S
                     Ok((size, TrashOutcome::WouldDelete))
                 } else {
                     remove_tree(&path)?;
+                    remove_json(&record_path)?;
                     reclaimed = reclaimed.saturating_add(size);
                     Ok((size, TrashOutcome::Deleted))
                 }
-            },
-        );
+            });
         let (size, outcome) = match attempt {
             Ok(value) => value,
             Err(error) => (
@@ -76,11 +76,11 @@ pub(crate) fn retry_trash(store: &Store, dry_run: bool) -> Result<TrashReport, S
 }
 
 fn inspect_entry(
+    store: &Store,
     path: &Path,
     trash: &Path,
     root: &Path,
-    store_id: Uuid,
-) -> Result<(ArenaId, ByteSize), StoreError> {
+) -> Result<(ArenaId, std::path::PathBuf, ByteSize), StoreError> {
     let Some((arena_id, retirement_id)) = retired_identity(path) else {
         return Err(StoreError::InvalidOwnership {
             path: path.to_path_buf(),
@@ -94,17 +94,10 @@ fn inspect_entry(
         });
     }
     ensure_real_contained_directory(path, root)?;
-    let manifest_path = path.join("arena.json");
-    let manifest: ArenaManifest = read_json(&manifest_path)?;
-    manifest.validate(store_id, &arena_id, manifest_path)?;
-    if manifest.retirement_id != Some(retirement_id) {
-        return Err(StoreError::InvalidOwnership {
-            path: path.to_path_buf(),
-            reason: "retirement nonce does not match the owned manifest".to_owned(),
-        });
-    }
-    ensure_real_contained_directory(&path.join("build"), root)?;
-    Ok((arena_id, measure_tree(path)?))
+    let record_path = store.layout.retirement_record(retirement_id);
+    let record: RetirementRecord = read_json(&record_path)?;
+    record.validate(store, &arena_id, retirement_id)?;
+    Ok((arena_id, record_path, measure_tree(path)?))
 }
 
 fn retired_identity(path: &Path) -> Option<(ArenaId, Uuid)> {

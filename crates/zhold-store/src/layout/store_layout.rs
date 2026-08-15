@@ -41,6 +41,10 @@ impl StoreLayout {
         self.root.join("trash")
     }
 
+    pub(crate) fn trash_index(&self) -> PathBuf {
+        self.root.join("trash-index")
+    }
+
     pub(crate) fn history(&self) -> PathBuf {
         self.root.join("history")
     }
@@ -132,6 +136,10 @@ impl StoreLayout {
 
     pub(crate) fn trash_destination(&self, id: &ArenaId, retirement_id: Uuid) -> PathBuf {
         self.trash().join(format!("{id}-{retirement_id}"))
+    }
+
+    pub(crate) fn retirement_record(&self, retirement_id: Uuid) -> PathBuf {
+        self.trash_index().join(format!("{retirement_id}.json"))
     }
 }
 

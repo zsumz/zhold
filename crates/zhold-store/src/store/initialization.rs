@@ -124,6 +124,7 @@ pub(super) fn ensure_layout(layout: &StoreLayout) -> Result<(), StoreError> {
         layout.locks().join("arenas"),
         layout.locks().join("metadata"),
         layout.trash(),
+        layout.trash_index(),
         layout.history(),
         layout.history_receipts(),
         layout.integrations(),

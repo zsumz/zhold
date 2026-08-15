@@ -7,9 +7,9 @@ use super::{CollectionReport, CollectionSkip, Retirement, RetirementDisposition}
 use crate::{
     Store, StoreError,
     inventory::{ArenaMeasurement, ensure_real_contained_directory, read_arena_snapshot},
-    io::{measure_tree, read_json, remove_tree, write_json},
+    io::{create_json, measure_tree, read_json, remove_json, remove_tree, write_json},
     lock::ExclusiveFileLock,
-    manifest::ArenaManifest,
+    manifest::{ArenaManifest, RetirementRecord},
 };
 
 pub(crate) fn collect(
@@ -195,10 +195,31 @@ pub(super) fn retire(
         .trash_destination(&eviction.arena_id, retirement_id);
     manifest.prepare_retirement(retirement_id);
     write_json(&manifest_path, &manifest)?;
-    fs::rename(&arena, &destination)
-        .map_err(|error| StoreError::io("atomically retire arena", &arena, error))?;
+    let record_path = store.layout.retirement_record(retirement_id);
+    let record = RetirementRecord::create(
+        store,
+        eviction.arena_id.clone(),
+        retirement_id,
+        manifest.revision,
+    );
+    if !create_json(&record_path, &record)? {
+        return Err(StoreError::InvalidOwnership {
+            path: record_path,
+            reason: "retirement journal appeared before arena retirement".to_owned(),
+        });
+    }
+    if let Err(error) = fs::rename(&arena, &destination) {
+        let _cleanup = remove_json(&record_path);
+        return Err(StoreError::io("atomically retire arena", &arena, error));
+    }
     let disposition = match remove_tree(&destination) {
-        Ok(()) => RetirementDisposition::Deleted,
+        Ok(()) => match remove_json(&record_path) {
+            Ok(()) => RetirementDisposition::Deleted,
+            Err(error) => RetirementDisposition::PendingDeletion {
+                path: record_path,
+                error: error.to_string(),
+            },
+        },
         Err(error) => RetirementDisposition::PendingDeletion {
             path: destination,
             error: error.to_string(),

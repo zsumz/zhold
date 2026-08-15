@@ -5,8 +5,8 @@ use uuid::Uuid;
 
 use crate::{
     BuildContext, CollectionReceiptSource, HistoryPayload, HistoryQuery, Store,
-    io::{read_json, write_json},
-    manifest::ArenaManifest,
+    io::{create_json, read_json, write_json},
+    manifest::{ArenaManifest, RetirementRecord},
     test_support::create_idle_arena,
 };
 
@@ -117,6 +117,26 @@ fn a_copied_manifest_without_the_retirement_nonce_fails_closed()
     Ok(())
 }
 
+#[test]
+fn a_partially_deleted_retirement_keeps_external_retry_authority()
+-> Result<(), Box<dyn std::error::Error>> {
+    let store_root = tempdir()?;
+    let project = tempdir()?;
+    let store = Store::open(store_root.path())?;
+    let (context, _) = create_idle_arena(&store, project.path(), 4_096)?;
+    let retired = retire_for_test(&store, &context)?;
+    fs::remove_file(retired.join("arena.json"))?;
+    fs::remove_dir_all(retired.join("build"))?;
+    fs::write(retired.join("remaining.bin"), b"remaining")?;
+
+    let report = store.retry_trash(false)?;
+
+    assert!(!retired.exists());
+    assert!(matches!(report.entries[0].outcome, TrashOutcome::Deleted));
+    assert!(store.layout.trash_index().read_dir()?.next().is_none());
+    Ok(())
+}
+
 fn retire_for_test(
     store: &Store,
     context: &BuildContext,
@@ -130,6 +150,14 @@ fn retire_for_test(
     let mut manifest: ArenaManifest = read_json(&manifest_path)?;
     manifest.prepare_retirement(retirement_id);
     write_json(&manifest_path, &manifest)?;
+    let record_path = store.layout.retirement_record(retirement_id);
+    let record = RetirementRecord::create(
+        store,
+        context.arena_id().clone(),
+        retirement_id,
+        manifest.revision,
+    );
+    assert!(create_json(&record_path, &record)?);
     fs::rename(arena, &retired)?;
     Ok(retired)
 }
