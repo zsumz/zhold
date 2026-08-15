@@ -16,12 +16,15 @@ pub(crate) fn context(root: &Path) -> Result<BuildContext, Box<dyn std::error::E
     let worktree_root = root.canonicalize()?;
     let git_common_dir = worktree_root.join(".git");
     fs::create_dir_all(&git_common_dir)?;
-    let description = worktree_root.to_str().ok_or_else(|| {
+    let worktree_description = worktree_root.to_str().ok_or_else(|| {
         io::Error::new(io::ErrorKind::InvalidData, "temporary path is not Unicode")
     })?;
-    let repository_id = RepositoryId::derive(&format!("{description}/.git"));
-    let worktree_id = WorktreeId::derive(description);
-    let workspace_id = WorkspaceId::derive(description);
+    let common_description = git_common_dir.to_str().ok_or_else(|| {
+        io::Error::new(io::ErrorKind::InvalidData, "temporary path is not Unicode")
+    })?;
+    let repository_id = RepositoryId::derive(common_description);
+    let worktree_id = WorktreeId::derive(worktree_description);
+    let workspace_id = WorkspaceId::derive(worktree_description);
     let toolchain_description = "cargo 1.91.0\nrustc 1.91.0".to_owned();
     let toolchain_id = ToolchainId::derive(&toolchain_description);
     let arena_id = ArenaId::derive(&repository_id, &worktree_id, &workspace_id, &toolchain_id);
