@@ -22,9 +22,6 @@ pub(crate) struct Cli {
     /// Minimum growth headroom; history may raise it conservatively.
     #[arg(long, global = true, env = "ZHOLD_BUILD_RESERVE")]
     pub(crate) build_reserve: Option<ByteSize>,
-    /// Best-effort warning threshold for one managed arena during Cargo execution.
-    #[arg(long, global = true, env = "ZHOLD_MAX_ARENA_SIZE")]
-    pub(crate) max_arena_size: Option<ByteSize>,
     /// Presentation format for zhold-owned output.
     #[arg(long, global = true, value_enum, default_value_t = OutputFormat::Human)]
     pub(crate) format: OutputFormat,

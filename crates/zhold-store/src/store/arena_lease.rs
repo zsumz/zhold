@@ -90,7 +90,7 @@ impl ArenaLease {
     }
 
     /// Records the complete bounded peak observation used by build history.
-    pub fn finish_observed(
+    pub(crate) fn finish_observed(
         mut self,
         outcome: BuildOutcome,
         peak: ByteSize,

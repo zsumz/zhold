@@ -3,7 +3,7 @@ use std::{
     path::PathBuf,
     process::{Command as ProcessCommand, ExitStatus as ProcessExitStatus},
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use serde::Serialize;
@@ -30,7 +30,6 @@ pub(crate) struct CargoReport {
     pub(crate) exit_code: i32,
     pub(crate) reservation: ByteSize,
     pub(crate) peak_size: ByteSize,
-    pub(crate) size_limit_exceeded: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -38,7 +37,6 @@ pub(crate) struct CargoLimits {
     pub(crate) budget: ByteSize,
     pub(crate) min_free: Option<ByteSize>,
     pub(crate) build_reserve: Option<ByteSize>,
-    pub(crate) max_arena_size: Option<ByteSize>,
 }
 
 pub(super) fn execute(
@@ -72,7 +70,6 @@ fn launch_sentinel(
         .arg(limits.budget.as_u64().to_string());
     append_limit(&mut command, "--min-free", limits.min_free);
     append_limit(&mut command, "--build-reserve", limits.build_reserve);
-    append_limit(&mut command, "--max-arena-size", limits.max_arena_size);
     let status = command
         .arg("cargo")
         .args(arguments)
@@ -141,8 +138,8 @@ fn execute_managed(
             });
         }
     };
-    let observed = wait_for_cargo(&mut child, &lease, limits.max_arena_size, format);
-    let (status, peak_size, size_limit_exceeded) = match observed {
+    let initial_size = measured_or_zero(&lease);
+    let status = match wait_for_cargo(&mut child) {
         Ok(value) => value,
         Err(source) => {
             finish_before_error(lease, format)?;
@@ -152,6 +149,7 @@ fn execute_managed(
             });
         }
     };
+    let peak_size = std::cmp::max(initial_size, measured_or_zero(&lease));
     let exit_code = status.code().unwrap_or(1);
     let outcome = if status.success() {
         BuildOutcome::Succeeded
@@ -167,60 +165,24 @@ fn execute_managed(
         exit_code,
         reservation,
         peak_size,
-        size_limit_exceeded,
     };
     finalize::execute(store, lease, &report, limits, format)
 }
 
 fn wait_for_cargo(
     child: &mut supervisor::CargoSupervisor,
-    lease: &zhold_store::ArenaLease,
-    limit: Option<ByteSize>,
-    format: OutputFormat,
-) -> Result<(ProcessExitStatus, ByteSize, bool), std::io::Error> {
-    let mut peak = measured_or_zero(lease);
-    let mut exceeded = false;
-    let mut next_measurement = Instant::now();
+) -> Result<ProcessExitStatus, std::io::Error> {
     loop {
         match child.try_wait() {
-            Ok(Some(status)) => {
-                let observed = measured_or_zero(lease);
-                peak = std::cmp::max(peak, observed);
-                if let Some(limit) = limit {
-                    exceeded = report_limit_once(lease, observed, limit, exceeded, format);
-                }
-                return Ok((status, peak, exceeded));
-            }
+            Ok(Some(status)) => return Ok(status),
             Ok(None) => {}
             Err(error) => {
                 let _termination = child.terminate_and_wait();
                 return Err(error);
             }
         }
-        if let Some(limit) = limit
-            && Instant::now() >= next_measurement
-        {
-            let observed = measured_or_zero(lease);
-            peak = std::cmp::max(peak, observed);
-            exceeded = report_limit_once(lease, observed, limit, exceeded, format);
-            next_measurement = Instant::now() + Duration::from_millis(500);
-        }
         thread::sleep(Duration::from_millis(20));
     }
-}
-
-fn report_limit_once(
-    lease: &zhold_store::ArenaLease,
-    observed: ByteSize,
-    limit: ByteSize,
-    already_exceeded: bool,
-    format: OutputFormat,
-) -> bool {
-    if already_exceeded || observed <= limit {
-        return already_exceeded;
-    }
-    let _ignored = render::cargo_size_limit_exceeded(lease.arena_id(), observed, limit, format);
-    true
 }
 
 fn measured_or_zero(lease: &zhold_store::ArenaLease) -> ByteSize {

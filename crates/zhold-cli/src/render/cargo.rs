@@ -54,7 +54,6 @@ pub(crate) fn cargo_finish(report: &CargoReport, format: OutputFormat) -> Result
             exit_code: i32,
             reservation: ByteSize,
             peak_size: zhold_core::ByteSize,
-            size_limit_exceeded: bool,
         }
         return json::write_stderr(&Finish {
             event: "cargo_finished",
@@ -64,7 +63,6 @@ pub(crate) fn cargo_finish(report: &CargoReport, format: OutputFormat) -> Result
             exit_code: report.exit_code,
             reservation: report.reservation,
             peak_size: report.peak_size,
-            size_limit_exceeded: report.size_limit_exceeded,
         });
     }
     let stderr = io::stderr();
@@ -87,41 +85,6 @@ pub(crate) fn cargo_finish_with_history(
     super::history::finalization(finalization, format)
 }
 
-pub(crate) fn cargo_size_limit_exceeded(
-    arena: &ArenaId,
-    observed: zhold_core::ByteSize,
-    limit: zhold_core::ByteSize,
-    format: OutputFormat,
-) -> Result<(), CliError> {
-    if matches!(format, OutputFormat::Json) {
-        #[derive(Serialize)]
-        struct Limit<'a> {
-            event: &'static str,
-            arena_id: &'a ArenaId,
-            observed: zhold_core::ByteSize,
-            limit: zhold_core::ByteSize,
-            action: &'static str,
-        }
-        return json::write_stderr(&Limit {
-            event: "arena_size_limit_exceeded",
-            arena_id: arena,
-            observed,
-            limit,
-            action: "warning",
-        });
-    }
-    let stderr = io::stderr();
-    let mut output = stderr.lock();
-    writeln!(
-        output,
-        "zhold  arena {} exceeds warning threshold: {} > {}",
-        short_id(arena),
-        observed,
-        limit
-    )
-    .map_err(output_error)
-}
-
 pub(crate) fn cargo_finalization_failed(
     report: &CargoReport,
     error: &str,
@@ -136,7 +99,6 @@ pub(crate) fn cargo_finalization_failed(
             outcome: BuildOutcome,
             exit_code: i32,
             peak_size: zhold_core::ByteSize,
-            size_limit_exceeded: bool,
             error: &'a str,
         }
         return json::write_stderr(&Failure {
@@ -146,7 +108,6 @@ pub(crate) fn cargo_finalization_failed(
             outcome: report.outcome,
             exit_code: report.exit_code,
             peak_size: report.peak_size,
-            size_limit_exceeded: report.size_limit_exceeded,
             error,
         });
     }

@@ -14,8 +14,7 @@ mod quota;
 mod scan;
 
 pub(crate) use cargo::{
-    cargo_finalization_failed, cargo_finish_with_history, cargo_management_failed,
-    cargo_size_limit_exceeded, cargo_start,
+    cargo_finalization_failed, cargo_finish_with_history, cargo_management_failed, cargo_start,
 };
 pub(crate) use collection::{collection, pin, post_build, preflight, trash};
 pub(crate) use config::setup;

@@ -108,53 +108,6 @@ fn concurrent_builds_cannot_spend_the_same_soft_budget() -> Result<(), Box<dyn s
     Ok(())
 }
 
-#[test]
-fn arena_size_threshold_warns_and_records_peak_without_killing_cargo()
--> Result<(), Box<dyn std::error::Error>> {
-    let temporary = tempdir()?;
-    let project = temporary.path().join("project");
-    let store = temporary.path().join("store");
-    create_project(&project)?;
-
-    let output = zhold(&project, &store)
-        .args([
-            "--format",
-            "json",
-            "--budget",
-            "100GiB",
-            "--max-arena-size",
-            "1B",
-            "cargo",
-            "check",
-        ])
-        .output()?;
-
-    assert!(output.status.success());
-    let stderr = String::from_utf8(output.stderr)?;
-    let events = stderr
-        .lines()
-        .filter(|line| line.starts_with("{\"event\":\""))
-        .map(serde_json::from_str::<serde_json::Value>)
-        .collect::<Result<Vec<_>, _>>()?;
-    assert!(
-        events
-            .iter()
-            .any(|event| event["event"] == "arena_size_limit_exceeded")
-    );
-    let finished = events
-        .iter()
-        .find(|event| event["event"] == "cargo_finished")
-        .ok_or_else(|| io::Error::other("missing cargo_finished event"))?;
-    assert_eq!(finished["size_limit_exceeded"], true);
-    assert!(
-        finished["peak_size"]
-            .as_u64()
-            .is_some_and(|value| value > 1)
-    );
-    assert!(Store::open(&store)?.inventory()?.arenas[0].last_peak > ByteSize::from_bytes(1));
-    Ok(())
-}
-
 fn zhold(project: &Path, store: &Path) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_zhold"));
     command
@@ -163,8 +116,7 @@ fn zhold(project: &Path, store: &Path) -> Command {
         .current_dir(project)
         .env_remove("ZHOLD_BUDGET")
         .env_remove("ZHOLD_MIN_FREE")
-        .env_remove("ZHOLD_BUILD_RESERVE")
-        .env_remove("ZHOLD_MAX_ARENA_SIZE");
+        .env_remove("ZHOLD_BUILD_RESERVE");
     command
 }
 

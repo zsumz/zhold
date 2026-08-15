@@ -106,8 +106,6 @@ fn parses_build_safety_limits() -> Result<(), clap::Error> {
         "10GiB",
         "--build-reserve",
         "2GiB",
-        "--max-arena-size",
-        "20GiB",
         "cargo",
         "check",
     ])?;
@@ -119,10 +117,6 @@ fn parses_build_safety_limits() -> Result<(), clap::Error> {
     assert_eq!(
         parsed.build_reserve,
         Some(ByteSize::from_bytes(2 * 1_024_u64.pow(3)))
-    );
-    assert_eq!(
-        parsed.max_arena_size,
-        Some(ByteSize::from_bytes(20 * 1_024_u64.pow(3)))
     );
     Ok(())
 }

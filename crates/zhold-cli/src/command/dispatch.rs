@@ -48,7 +48,6 @@ pub(crate) fn execute(cli: Cli) -> Result<ExitStatus, CliError> {
                 budget: budget.ok_or(CliError::MissingCargoBudget)?,
                 min_free: cli.min_free.or(config.min_filesystem_free),
                 build_reserve: cli.build_reserve.or(config.minimum_build_reservation),
-                max_arena_size: cli.max_arena_size,
             },
             cli.format,
         ),
