@@ -1,7 +1,6 @@
-use std::{
-    env,
-    path::{Path, PathBuf},
-};
+use std::{env, path::PathBuf};
+
+use serde::Deserialize;
 
 use crate::{CargoInvocation, StoreError, context::process};
 
@@ -12,11 +11,16 @@ pub(super) struct CargoContext {
     pub(super) toolchain_description: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct MetadataOutput {
+    workspace_root: PathBuf,
+}
+
 pub(super) fn resolve(invocation: &CargoInvocation) -> Result<CargoContext, StoreError> {
-    let prefix = invocation.discovery_arguments();
+    let prefix = invocation.toolchain_arguments();
     let version = cargo_version(invocation, &prefix)?;
     ensure_supported(&version)?;
-    let workspace_root = workspace_root(invocation, &prefix)?;
+    let workspace_root = workspace_root(invocation)?;
     let cargo_verbose = cargo_verbose(invocation, &prefix)?;
     let (rustc_program, rustc_verbose) = rustc_verbose(invocation)?;
     Ok(CargoContext {
@@ -74,29 +78,17 @@ fn rustc_verbose(invocation: &CargoInvocation) -> Result<(String, String), Store
     Ok((program, verbose))
 }
 
-fn workspace_root(invocation: &CargoInvocation, prefix: &[String]) -> Result<PathBuf, StoreError> {
-    let mut arguments = prefix.to_vec();
-    arguments.extend([
-        "locate-project".to_owned(),
-        "--workspace".to_owned(),
-        "--message-format".to_owned(),
-        "plain".to_owned(),
-    ]);
+fn workspace_root(invocation: &CargoInvocation) -> Result<PathBuf, StoreError> {
+    let arguments = invocation.metadata_arguments()?;
     let manifest = process::required_output(
         invocation.program(),
         &arguments,
         invocation.working_directory(),
         None,
     )?;
-    let manifest = PathBuf::from(manifest);
-    let manifest = super::git::canonical_path(&manifest, "Cargo workspace manifest")?;
-    manifest
-        .parent()
-        .map(Path::to_path_buf)
-        .ok_or_else(|| StoreError::InvalidOwnership {
-            path: manifest,
-            reason: "workspace manifest has no parent directory".to_owned(),
-        })
+    let metadata: MetadataOutput = serde_json::from_str(&manifest)
+        .map_err(|error| StoreError::InvalidCargoMetadata(error.to_string()))?;
+    super::git::canonical_path(&metadata.workspace_root, "Cargo workspace root")
 }
 
 pub(super) fn parse_version(output: &str) -> Option<String> {

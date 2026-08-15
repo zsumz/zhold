@@ -32,8 +32,32 @@ fn physical_git_worktrees_receive_distinct_arenas_in_one_repository()
     Ok(())
 }
 
+#[test]
+fn manifest_path_selects_distinct_workspaces_in_one_worktree()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let root = temporary.path().join("repository");
+    let first = root.join("first");
+    let second = root.join("second");
+    fs::create_dir(&root)?;
+    create_project(&first)?;
+    create_project(&second)?;
+    git(&root, &["init"])?;
+
+    let first_context = ContextResolver::resolve(&manifest_invocation(&root, &first)?)?;
+    let second_context = ContextResolver::resolve(&manifest_invocation(&root, &second)?)?;
+
+    assert_eq!(first_context.repository_id, second_context.repository_id);
+    assert_eq!(first_context.worktree_id, second_context.worktree_id);
+    assert_ne!(first_context.workspace_id, second_context.workspace_id);
+    assert_ne!(first_context.arena_id, second_context.arena_id);
+    assert_eq!(first_context.workspace_root, first.canonicalize()?);
+    assert_eq!(second_context.workspace_root, second.canonicalize()?);
+    Ok(())
+}
+
 fn create_project(root: &Path) -> Result<(), io::Error> {
-    fs::create_dir(root.join("src"))?;
+    fs::create_dir_all(root.join("src"))?;
     fs::write(
         root.join("Cargo.toml"),
         "[package]\nname = \"worktree-fixture\"\nversion = \"0.0.1-rc.1\"\nedition = \"2024\"\n",
@@ -45,6 +69,21 @@ fn invocation(root: &Path) -> Result<CargoInvocation, crate::StoreError> {
     CargoInvocation::new(
         "cargo".to_owned(),
         vec!["check".to_owned()],
+        root.to_path_buf(),
+    )
+}
+
+fn manifest_invocation(
+    root: &Path,
+    workspace: &Path,
+) -> Result<CargoInvocation, crate::StoreError> {
+    CargoInvocation::new(
+        "cargo".to_owned(),
+        vec![
+            "check".to_owned(),
+            "--manifest-path".to_owned(),
+            workspace.join("Cargo.toml").display().to_string(),
+        ],
         root.to_path_buf(),
     )
 }

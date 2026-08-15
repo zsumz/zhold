@@ -28,8 +28,8 @@ impl ContextResolver {
 
     /// Resolves the complete managed build context for an invocation.
     pub fn resolve(invocation: &CargoInvocation) -> Result<BuildContext, StoreError> {
-        let git = context::git::resolve(invocation.working_directory())?;
         let cargo = context::cargo::resolve(invocation)?;
+        let git = context::git::resolve(&cargo.workspace_root)?;
         if !cargo.workspace_root.starts_with(&git.worktree_root) {
             return Err(StoreError::InvalidOwnership {
                 path: cargo.workspace_root,

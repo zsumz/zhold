@@ -57,7 +57,7 @@ impl CargoInvocation {
             .filter(|value| !value.is_empty())
     }
 
-    pub(crate) fn discovery_arguments(&self) -> Vec<String> {
+    pub(crate) fn toolchain_arguments(&self) -> Vec<String> {
         self.arguments
             .first()
             .filter(|argument| argument.starts_with('+'))
@@ -66,7 +66,75 @@ impl CargoInvocation {
             .collect()
     }
 
+    pub(crate) fn metadata_arguments(&self) -> Result<Vec<String>, StoreError> {
+        let boundary = self
+            .arguments
+            .iter()
+            .position(|argument| argument == "--")
+            .unwrap_or(self.arguments.len());
+        let mut prefix = self.toolchain_arguments();
+        let mut manifest = None;
+        let mut modes = Vec::new();
+        let mut index = usize::from(!prefix.is_empty());
+        while index < boundary {
+            let argument = &self.arguments[index];
+            match argument.as_str() {
+                "-C" | "-Z" | "--config" => {
+                    let value = required_value(&self.arguments, index, argument)?;
+                    prefix.extend([argument.clone(), value.clone()]);
+                    index = index.saturating_add(2);
+                }
+                "--manifest-path" => {
+                    let value = required_value(&self.arguments, index, argument)?;
+                    manifest = Some(value.clone());
+                    index = index.saturating_add(2);
+                }
+                "--locked" | "--offline" | "--frozen" => {
+                    modes.push(argument.clone());
+                    index = index.saturating_add(1);
+                }
+                _ if joined_prelude(argument) => {
+                    prefix.push(argument.clone());
+                    index = index.saturating_add(1);
+                }
+                _ if argument.starts_with("--manifest-path=") => {
+                    manifest = argument.split_once('=').map(|(_, value)| value.to_owned());
+                    index = index.saturating_add(1);
+                }
+                _ => index = index.saturating_add(1),
+            }
+        }
+        prefix.extend([
+            "metadata".to_owned(),
+            "--no-deps".to_owned(),
+            "--format-version".to_owned(),
+            "1".to_owned(),
+        ]);
+        if let Some(manifest) = manifest {
+            prefix.extend(["--manifest-path".to_owned(), manifest]);
+        }
+        prefix.extend(modes);
+        Ok(prefix)
+    }
+
     pub(crate) fn descriptor(&self) -> CommandDescriptor {
         CommandDescriptor::from_arguments(&self.arguments)
     }
+}
+
+fn required_value<'a>(
+    arguments: &'a [String],
+    index: usize,
+    option: &str,
+) -> Result<&'a String, StoreError> {
+    arguments
+        .get(index.saturating_add(1))
+        .filter(|value| value.as_str() != "--")
+        .ok_or_else(|| StoreError::InvalidCargoInvocation(format!("{option} requires a value")))
+}
+
+fn joined_prelude(argument: &str) -> bool {
+    (argument.starts_with("-C") && argument.len() > 2)
+        || (argument.starts_with("-Z") && argument.len() > 2)
+        || argument.starts_with("--config=")
 }

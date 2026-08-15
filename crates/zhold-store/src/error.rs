@@ -58,6 +58,12 @@ pub enum StoreError {
     /// The wrapped command is not Cargo.
     #[error("zhold can manage only Cargo commands; received `{0}`")]
     NotCargo(String),
+    /// Cargo invocation options required for safe context resolution were malformed.
+    #[error("invalid Cargo invocation: {0}")]
+    InvalidCargoInvocation(String),
+    /// Cargo metadata returned output that could not establish a workspace.
+    #[error("invalid Cargo metadata output: {0}")]
+    InvalidCargoMetadata(String),
     /// The discovered Cargo version predates managed build directories.
     #[error("Cargo {found} is unsupported; zhold requires Cargo 1.91 or newer")]
     UnsupportedCargo {

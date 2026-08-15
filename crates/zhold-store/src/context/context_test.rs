@@ -42,3 +42,55 @@ fn cargo_release_is_parsed_from_standard_output() {
         Some("1.91.0".to_owned())
     );
 }
+
+#[test]
+fn metadata_discovery_preserves_context_affecting_options() -> Result<(), Box<dyn std::error::Error>>
+{
+    let invocation = CargoInvocation::new(
+        "cargo".to_owned(),
+        vec![
+            "+nightly".to_owned(),
+            "-Zunstable-options".to_owned(),
+            "-C".to_owned(),
+            "services/api".to_owned(),
+            "test".to_owned(),
+            "--config".to_owned(),
+            "net.offline=true".to_owned(),
+            "--manifest-path=member/Cargo.toml".to_owned(),
+            "--locked".to_owned(),
+        ],
+        PathBuf::from("/tmp/project"),
+    )?;
+
+    assert_eq!(
+        invocation.metadata_arguments()?,
+        vec![
+            "+nightly".to_owned(),
+            "-Zunstable-options".to_owned(),
+            "-C".to_owned(),
+            "services/api".to_owned(),
+            "--config".to_owned(),
+            "net.offline=true".to_owned(),
+            "metadata".to_owned(),
+            "--no-deps".to_owned(),
+            "--format-version".to_owned(),
+            "1".to_owned(),
+            "--manifest-path".to_owned(),
+            "member/Cargo.toml".to_owned(),
+            "--locked".to_owned(),
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn metadata_discovery_rejects_missing_option_values() -> Result<(), Box<dyn std::error::Error>> {
+    let invocation = CargoInvocation::new(
+        "cargo".to_owned(),
+        vec!["test".to_owned(), "--manifest-path".to_owned()],
+        PathBuf::from("/tmp/project"),
+    )?;
+
+    assert!(invocation.metadata_arguments().is_err());
+    Ok(())
+}
