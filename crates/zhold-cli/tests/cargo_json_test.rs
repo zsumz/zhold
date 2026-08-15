@@ -157,7 +157,7 @@ fn create_project(root: &Path, mutation: FixtureMutation) -> Result<(), io::Erro
     fs::create_dir_all(root.join("src"))?;
     fs::write(
         root.join("Cargo.toml"),
-        "[package]\nname = \"json-fixture\"\nversion = \"0.0.1-rc.1\"\nedition = \"2024\"\n",
+        "[package]\nname = \"json-fixture\"\nversion = \"0.1.0-alpha.1\"\nedition = \"2024\"\n",
     )?;
     fs::write(root.join("src/lib.rs"), "pub fn value() -> u8 { 5 }\n")?;
     match mutation {

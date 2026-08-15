@@ -607,7 +607,7 @@ dependencies = [
 
 [[package]]
 name = "zhold"
-version = "0.0.1-rc.1"
+version = "0.1.0-alpha.1"
 dependencies = [
  "clap",
  "command-group",
@@ -623,7 +623,7 @@ dependencies = [
 
 [[package]]
 name = "zhold-core"
-version = "0.0.1-rc.1"
+version = "0.1.0-alpha.1"
 dependencies = [
  "blake3",
  "serde",
@@ -632,7 +632,7 @@ dependencies = [
 
 [[package]]
 name = "zhold-store"
-version = "0.0.1-rc.1"
+version = "0.1.0-alpha.1"
 dependencies = [
  "blake3",
  "fs2",

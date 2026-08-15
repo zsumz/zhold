@@ -165,7 +165,7 @@ fn create_project(root: &Path, build_script: BuildScript) -> Result<(), io::Erro
     fs::create_dir_all(root.join("src"))?;
     fs::write(
         root.join("Cargo.toml"),
-        "[package]\nname = \"zhold-fixture\"\nversion = \"0.0.1-rc.1\"\nedition = \"2024\"\n",
+        "[package]\nname = \"zhold-fixture\"\nversion = \"0.1.0-alpha.1\"\nedition = \"2024\"\n",
     )?;
     fs::write(
         root.join("src/main.rs"),

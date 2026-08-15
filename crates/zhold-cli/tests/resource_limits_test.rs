@@ -124,7 +124,7 @@ fn create_project(root: &Path) -> Result<(), io::Error> {
     fs::create_dir_all(root.join("src"))?;
     fs::write(
         root.join("Cargo.toml"),
-        "[package]\nname = \"limits-fixture\"\nversion = \"0.0.1-rc.1\"\nedition = \"2024\"\n",
+        "[package]\nname = \"limits-fixture\"\nversion = \"0.1.0-alpha.1\"\nedition = \"2024\"\n",
     )?;
     fs::write(root.join("src/lib.rs"), "pub fn value() -> u8 { 5 }\n")?;
     git(root, &["init"])?;
