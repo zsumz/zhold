@@ -179,8 +179,7 @@ fn set_store_modes(root: &Path, read_only: bool) -> Result<(), io::Error> {
             (true, false) => 0o700,
             // zhold's private-file contract requires 0600 even when the directory namespace is
             // made non-writable to emulate a read-only store mount.
-            (false, true) => 0o600,
-            (false, false) => 0o600,
+            (false, _) => 0o600,
         };
         fs::set_permissions(path, fs::Permissions::from_mode(mode))?;
     }
