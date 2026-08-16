@@ -64,8 +64,13 @@ drift are checked before an adopted quota participates in admission.
 - An unfinished build whose sentinel lease vanished becomes suspect; its bytes
   and reservation remain protected until `zhold recover <arena> --terminated`
   records the operator's process-tree confirmation.
-- A dropped lease records a terminated run when primary metadata remains valid.
+- A dropped reserved lease records `NotStarted`; a dropped spawning or spawned lease remains
+  unfinished unless process-tree cleanup was explicitly confirmed.
 - Torn JSON publication can recover from the last synchronized backup.
+- A spawned arena is finalized only after the supervised process tree is observed exited or
+  cleanup is confirmed; otherwise its unfinished lifecycle becomes suspect after lock release.
+- Backup-based JSON recovery preserves the last validated generation until its replacement is
+  durably synchronized.
 - Retired directories that could not be removed retain an external journal in
   `trash-index` so partially deleting their contents cannot erase retry proof.
 - A dirty history index is rebuilt from validated immutable receipts.
