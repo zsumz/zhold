@@ -5,7 +5,6 @@ use std::{
 };
 
 use serde::{Serialize, de::DeserializeOwned};
-use uuid::Uuid;
 
 use crate::{
     StoreError,
@@ -44,41 +43,11 @@ fn read_backup<T: DeserializeOwned>(path: &Path, primary: StoreError) -> Result<
     }
 }
 
-pub(crate) fn create_json<T: Serialize>(path: &Path, value: &T) -> Result<bool, StoreError> {
-    validate_metadata_parent(path)?;
-    validate_existing_file(path)?;
-    let temporary = temporary_path(path);
-    let bytes = encoded(path, value)?;
-    let mut options = OpenOptions::new();
-    options.create_new(true).write(true);
-    configure_private_file(&mut options);
-    let mut file = options
-        .open(&temporary)
-        .map_err(|error| StoreError::io("create metadata staging file", &temporary, error))?;
-    secure_open_file(&file, &temporary)?;
-    write_and_sync(&mut file, &temporary, &bytes)?;
-    drop(file);
-    match fs::hard_link(&temporary, path) {
-        Ok(()) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            remove_staging_file(&temporary)?;
-            validate_existing_file(path)?;
-            return Ok(false);
-        }
-        Err(error) => {
-            let _ignored = fs::remove_file(&temporary);
-            return Err(StoreError::io("publish new metadata file", path, error));
-        }
-    }
-    sync_metadata_directory(path)?;
-    remove_staging_file(&temporary)?;
-    sync_metadata_directory(path)?;
-    Ok(true)
-}
-
 pub(crate) fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), StoreError> {
-    let _publication = write_json_commit_aware(path, value)?;
-    Ok(())
+    match write_json_commit_aware(path, value)? {
+        JsonPublication::Durable { .. } => Ok(()),
+        JsonPublication::VisibleButDurabilityUnconfirmed { error } => Err(error),
+    }
 }
 
 pub(crate) fn write_json_commit_aware<T: Serialize>(
@@ -113,21 +82,25 @@ pub(crate) fn remove_json(path: &Path) -> Result<(), StoreError> {
     sync_metadata_directory(path)
 }
 
-fn encoded<T: Serialize>(path: &Path, value: &T) -> Result<Vec<u8>, StoreError> {
+pub(super) fn encoded<T: Serialize>(path: &Path, value: &T) -> Result<Vec<u8>, StoreError> {
     let mut bytes =
         serde_json::to_vec_pretty(value).map_err(|error| StoreError::json(path, error))?;
     bytes.push(b'\n');
     Ok(bytes)
 }
 
-fn write_and_sync(file: &mut std::fs::File, path: &Path, bytes: &[u8]) -> Result<(), StoreError> {
+pub(super) fn write_and_sync(
+    file: &mut std::fs::File,
+    path: &Path,
+    bytes: &[u8],
+) -> Result<(), StoreError> {
     file.write_all(bytes)
         .map_err(|error| StoreError::io("write metadata file", path, error))?;
     file.sync_all()
         .map_err(|error| StoreError::io("sync metadata file", path, error))
 }
 
-fn remove_staging_file(path: &Path) -> Result<(), StoreError> {
+pub(super) fn remove_staging_file(path: &Path) -> Result<(), StoreError> {
     fs::remove_file(path)
         .map_err(|error| StoreError::io("remove metadata staging file", path, error))
 }
@@ -170,6 +143,8 @@ pub(super) fn write_json_with_fault<T: Serialize>(
             PublicationPoint::PublishedDirectorySynced => "published_directory_synced",
             PublicationPoint::BeforeBackupRemoval => "backup_removal",
             PublicationPoint::BackupRemoved => "backup_removed",
+            PublicationPoint::BeforeStagingRemoval => "staging_removal",
+            PublicationPoint::StagingRemoved => "staging_removed",
             PublicationPoint::BeforeFinalDirectorySync => "final_directory_sync",
         };
         if name == fault {
@@ -184,7 +159,7 @@ pub(super) fn write_json_with_fault<T: Serialize>(
     })
 }
 
-fn validate_metadata_parent(path: &Path) -> Result<(), StoreError> {
+pub(super) fn validate_metadata_parent(path: &Path) -> Result<(), StoreError> {
     let parent = metadata_parent(path)?;
     let metadata = fs::symlink_metadata(parent)
         .map_err(|error| StoreError::io("inspect metadata directory", parent, error))?;
@@ -245,6 +220,6 @@ pub(super) fn backup_path(path: &Path) -> PathBuf {
     path.with_extension("json.bak")
 }
 
-fn temporary_path(path: &Path) -> PathBuf {
-    path.with_extension(format!("json.{}.new", Uuid::new_v4()))
+pub(super) fn temporary_path(path: &Path) -> PathBuf {
+    path.with_extension(format!("json.{}.new", uuid::Uuid::new_v4()))
 }

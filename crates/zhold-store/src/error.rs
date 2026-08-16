@@ -37,6 +37,14 @@ pub enum StoreError {
         #[source]
         source: Box<serde_json::Error>,
     },
+    /// A new metadata primary is visible, but its directory entry was not proven durable.
+    #[error("metadata publication at `{path}` is visible but durability is unconfirmed: {reason}")]
+    MetadataDurabilityUnconfirmed {
+        /// Visible metadata path whose directory synchronization failed.
+        path: PathBuf,
+        /// Underlying synchronization or injected fault.
+        reason: String,
+    },
     /// A non-empty directory did not contain a valid zhold store marker.
     #[error("refusing to claim non-empty unmarked store root `{0}`")]
     UnmarkedStore(PathBuf),
@@ -159,6 +167,13 @@ impl StoreError {
         Self::Json {
             path: path.into(),
             source: Box::new(source),
+        }
+    }
+
+    pub(crate) fn durability_unconfirmed(path: &std::path::Path, error: &Self) -> Self {
+        Self::MetadataDurabilityUnconfirmed {
+            path: path.to_path_buf(),
+            reason: error.to_string(),
         }
     }
 }

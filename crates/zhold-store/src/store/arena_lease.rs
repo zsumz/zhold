@@ -152,6 +152,9 @@ impl ArenaLease {
         )?;
         self.stage = LeaseStage::Finalized;
         self.release_locks();
+        if let Some(error) = primary.durability_error {
+            return Err(error);
+        }
         let mut warnings = primary.warnings;
         if !matches!(outcome, BuildOutcome::NotStarted) {
             warnings.extend(self.learn_reservation(primary.command_class, primary.observed_growth));
@@ -218,6 +221,9 @@ impl Drop for ArenaLease {
         );
         self.release_locks();
         if let Ok(primary) = build {
+            if primary.durability_error.is_some() {
+                return;
+            }
             if !matches!(outcome, BuildOutcome::NotStarted) {
                 let _warnings =
                     self.learn_reservation(primary.command_class, primary.observed_growth);

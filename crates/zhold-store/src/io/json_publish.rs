@@ -9,24 +9,27 @@ use crate::{
 use crate::io::json_file::metadata_parent;
 
 #[derive(Debug)]
-pub(crate) struct JsonPublication {
-    cleanup_warning: Option<StoreError>,
+pub(crate) enum JsonPublication {
+    Durable { cleanup_warning: Option<StoreError> },
+    VisibleButDurabilityUnconfirmed { error: StoreError },
 }
 
 impl JsonPublication {
-    pub(crate) fn cleanup_warning(self) -> Option<StoreError> {
-        self.cleanup_warning
-    }
-
-    const fn clean() -> Self {
-        Self {
+    pub(super) const fn clean() -> Self {
+        Self::Durable {
             cleanup_warning: None,
         }
     }
 
-    fn warning(error: StoreError) -> Self {
-        Self {
+    pub(super) fn cleanup_warning(error: StoreError) -> Self {
+        Self::Durable {
             cleanup_warning: Some(error),
+        }
+    }
+
+    pub(super) fn durability_unconfirmed(path: &Path, error: &StoreError) -> Self {
+        Self::VisibleButDurabilityUnconfirmed {
+            error: StoreError::durability_unconfirmed(path, error),
         }
     }
 }
@@ -39,6 +42,8 @@ pub(super) enum PublicationPoint {
     PublishedDirectorySynced,
     BeforeBackupRemoval,
     BackupRemoved,
+    BeforeStagingRemoval,
+    StagingRemoved,
     BeforeFinalDirectorySync,
 }
 
@@ -77,36 +82,36 @@ pub(super) fn replace_with_backup_with(
         return Err(StoreError::io("publish metadata", path, error));
     }
     if let Err(error) = checkpoint(PublicationPoint::PrimaryPublished) {
-        return Ok(JsonPublication::warning(error));
+        return Ok(JsonPublication::durability_unconfirmed(path, &error));
     }
     if let Err(error) = checkpoint(PublicationPoint::BeforePublishedDirectorySync) {
-        return Ok(JsonPublication::warning(error));
+        return Ok(JsonPublication::durability_unconfirmed(path, &error));
     }
     if let Err(error) = sync_metadata_directory(path) {
-        return Ok(JsonPublication::warning(error));
+        return Ok(JsonPublication::durability_unconfirmed(path, &error));
     }
     if let Err(error) = checkpoint(PublicationPoint::PublishedDirectorySynced) {
-        return Ok(JsonPublication::warning(error));
+        return Ok(JsonPublication::cleanup_warning(error));
     }
     if is_real_file(&backup)? {
         if let Err(error) = checkpoint(PublicationPoint::BeforeBackupRemoval) {
-            return Ok(JsonPublication::warning(error));
+            return Ok(JsonPublication::cleanup_warning(error));
         }
         if let Err(error) = fs::remove_file(&backup) {
-            return Ok(JsonPublication::warning(StoreError::io(
+            return Ok(JsonPublication::cleanup_warning(StoreError::io(
                 "remove metadata backup",
                 &backup,
                 error,
             )));
         }
         if let Err(error) = checkpoint(PublicationPoint::BackupRemoved) {
-            return Ok(JsonPublication::warning(error));
+            return Ok(JsonPublication::cleanup_warning(error));
         }
         if let Err(error) = checkpoint(PublicationPoint::BeforeFinalDirectorySync) {
-            return Ok(JsonPublication::warning(error));
+            return Ok(JsonPublication::cleanup_warning(error));
         }
         if let Err(error) = sync_metadata_directory(path) {
-            return Ok(JsonPublication::warning(error));
+            return Ok(JsonPublication::cleanup_warning(error));
         }
     }
     Ok(JsonPublication::clean())

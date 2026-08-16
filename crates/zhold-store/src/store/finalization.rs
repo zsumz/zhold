@@ -3,7 +3,7 @@ use zhold_core::{ArenaId, BuildOutcome, ByteSize, CargoCommandClass};
 use crate::{
     BuildReceipt, FinalizationWarning, FinalizationWarningEvent, Store, StoreError,
     history::HistoryDraft,
-    io::{read_json, write_json_commit_aware},
+    io::{JsonPublication, read_json, write_json_commit_aware},
     lock::ExclusiveFileLock,
     manifest::ArenaManifest,
     time::{unix_milliseconds, unix_seconds},
@@ -14,6 +14,7 @@ pub(crate) struct PrimaryFinalization {
     pub(crate) command_class: CargoCommandClass,
     pub(crate) observed_growth: ByteSize,
     pub(crate) warnings: Vec<FinalizationWarning>,
+    pub(crate) durability_error: Option<StoreError>,
 }
 
 impl Store {
@@ -47,14 +48,18 @@ impl Store {
             finished_seconds,
         );
         let publication = write_json_commit_aware(&manifest_path, &manifest)?;
-        let warnings = publication
-            .cleanup_warning()
-            .map_or_else(Vec::new, |error| {
-                vec![FinalizationWarning {
-                    event: FinalizationWarningEvent::MetadataCleanupFailed,
-                    message: error.to_string(),
-                }]
-            });
+        let (warnings, durability_error) = match publication {
+            JsonPublication::Durable { cleanup_warning } => (
+                cleanup_warning.map_or_else(Vec::new, |error| {
+                    vec![FinalizationWarning {
+                        event: FinalizationWarningEvent::MetadataCleanupFailed,
+                        message: error.to_string(),
+                    }]
+                }),
+                None,
+            ),
+            JsonPublication::VisibleButDurabilityUnconfirmed { error } => (Vec::new(), Some(error)),
+        };
         let observed_growth = high_water_observation.saturating_sub(initial_bytes);
         let history = HistoryDraft::build(
             BuildReceipt {
@@ -88,6 +93,7 @@ impl Store {
             command_class,
             observed_growth,
             warnings,
+            durability_error,
         })
     }
 }

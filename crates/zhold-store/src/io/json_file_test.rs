@@ -5,8 +5,12 @@ use tempfile::tempdir;
 
 use crate::StoreError;
 
-use super::json_file::{backup_eligible, write_json_with_fault};
 use super::{create_json, read_json, write_json};
+use super::{
+    json_create::{JsonCreation, create_json_with_fault},
+    json_file::{backup_eligible, write_json_with_fault},
+    json_publish::JsonPublication,
+};
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 struct Document {
@@ -67,15 +71,15 @@ fn publishes_without_discarding_a_recoverable_backup() -> Result<(), Box<dyn std
 fn publication_faults_preserve_the_authoritative_commit_boundary()
 -> Result<(), Box<dyn std::error::Error>> {
     let cases = [
-        ("primary_rotated", false),
-        ("primary_published", true),
-        ("published_directory_sync", true),
-        ("published_directory_synced", true),
-        ("backup_removal", true),
-        ("backup_removed", true),
-        ("final_directory_sync", true),
+        ("primary_rotated", "not_visible"),
+        ("primary_published", "uncertain"),
+        ("published_directory_sync", "uncertain"),
+        ("published_directory_synced", "durable_warning"),
+        ("backup_removal", "durable_warning"),
+        ("backup_removed", "durable_warning"),
+        ("final_directory_sync", "durable_warning"),
     ];
-    for (fault, committed) in cases {
+    for (fault, expected) in cases {
         let temporary = tempdir()?;
         let path = temporary.path().join("state.json");
         let stable = document(7, "stable");
@@ -83,14 +87,58 @@ fn publication_faults_preserve_the_authoritative_commit_boundary()
         create_json(&path, &stable)?;
 
         let publication = write_json_with_fault(&path, &updated, fault);
-        if committed {
-            let publication = publication?;
-            assert!(publication.cleanup_warning().is_some(), "fault {fault}");
-            assert_eq!(read_json::<Document>(&path)?, updated, "fault {fault}");
-        } else {
-            assert!(publication.is_err(), "fault {fault}");
-            assert_eq!(read_json::<Document>(&path)?, stable, "fault {fault}");
+        match (expected, publication) {
+            ("not_visible", Err(_)) => {
+                assert_eq!(read_json::<Document>(&path)?, stable, "fault {fault}");
+            }
+            ("uncertain", Ok(JsonPublication::VisibleButDurabilityUnconfirmed { error })) => {
+                assert!(matches!(
+                    error,
+                    StoreError::MetadataDurabilityUnconfirmed { .. }
+                ));
+                assert_eq!(read_json::<Document>(&path)?, updated, "fault {fault}");
+            }
+            ("durable_warning", Ok(JsonPublication::Durable { cleanup_warning })) => {
+                assert!(cleanup_warning.is_some(), "fault {fault}");
+                assert_eq!(read_json::<Document>(&path)?, updated, "fault {fault}");
+            }
+            _ => return Err(format!("unexpected publication state for fault {fault}").into()),
         }
+    }
+    Ok(())
+}
+
+#[test]
+fn creation_faults_distinguish_visibility_from_durability() -> Result<(), Box<dyn std::error::Error>>
+{
+    let cases = [
+        ("primary_published", "uncertain"),
+        ("published_directory_sync", "uncertain"),
+        ("published_directory_synced", "durable_warning"),
+        ("staging_removal", "durable_warning"),
+        ("staging_removed", "durable_warning"),
+        ("final_directory_sync", "durable_warning"),
+    ];
+    for (fault, expected) in cases {
+        let temporary = tempdir()?;
+        let path = temporary.path().join("state.json");
+        let value = document(1, "created");
+        let creation = create_json_with_fault(&path, &value, fault)?;
+        match (expected, creation) {
+            (
+                "uncertain",
+                JsonCreation::Published(JsonPublication::VisibleButDurabilityUnconfirmed { error }),
+            ) => assert!(matches!(
+                error,
+                StoreError::MetadataDurabilityUnconfirmed { .. }
+            )),
+            (
+                "durable_warning",
+                JsonCreation::Published(JsonPublication::Durable { cleanup_warning }),
+            ) => assert!(cleanup_warning.is_some(), "fault {fault}"),
+            _ => return Err(format!("unexpected creation state for fault {fault}").into()),
+        }
+        assert_eq!(read_json::<Document>(&path)?, value, "fault {fault}");
     }
     Ok(())
 }
