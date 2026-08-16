@@ -34,13 +34,29 @@ fn read_only_commands_never_initialize_a_missing_store() -> Result<(), Box<dyn s
     let store = temporary.path().join("missing");
     for arguments in [
         &["status"][..],
+        &["scan"][..],
         &["doctor"][..],
+        &["explain", "abcdef"][..],
         &["--budget", "1KiB", "gc", "--dry-run"][..],
     ] {
         let output = zhold(&store, temporary.path(), arguments)?;
         assert!(!output.status.success());
         assert!(!store.exists(), "{arguments:?} initialized the store");
     }
+    Ok(())
+}
+
+#[test]
+fn failing_read_only_queries_also_leave_the_store_unchanged()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let store = temporary.path().join("store");
+    initialize(&store)?;
+    let expected = snapshot(&store)?;
+
+    let output = zhold(&store, temporary.path(), &["explain", "abcdef"])?;
+    assert!(!output.status.success());
+    assert_eq!(snapshot(&store)?, expected);
     Ok(())
 }
 
@@ -77,13 +93,23 @@ fn initialize(root: &Path) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn read_only_commands() -> [&'static [&'static str]; 4] {
-    [
-        &["status"],
-        &["status", "--deep"],
-        &["doctor"],
-        &["gc", "--dry-run"],
-    ]
+fn read_only_commands() -> Vec<&'static [&'static str]> {
+    let mut commands = vec![
+        &["status"][..],
+        &["status", "--deep"][..],
+        &["scan"][..],
+        &["doctor"][..],
+        &["gc", "--dry-run"][..],
+    ];
+    #[cfg(feature = "experimental")]
+    commands.extend([
+        &["history"][..],
+        &["history", "prune", "--dry-run"][..],
+        &["history", "policy"][..],
+        &["quota", "status"][..],
+        &["quota", "plan", "1KiB"][..],
+    ]);
+    commands
 }
 
 fn zhold(store: &Path, cwd: &Path, arguments: &[&str]) -> Result<std::process::Output, io::Error> {
