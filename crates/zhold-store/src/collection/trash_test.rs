@@ -7,7 +7,7 @@ use crate::{
     BuildContext, CollectionReceiptSource, HistoryPayload, HistoryQuery, Store,
     io::{create_json, read_json, write_json},
     manifest::{ArenaManifest, RetirementRecord},
-    test_support::create_idle_arena,
+    test_support::{create_idle_arena, finish_succeeded},
 };
 
 use super::TrashOutcome;
@@ -67,7 +67,7 @@ fn a_live_lease_for_the_same_identity_blocks_trash_retry() -> Result<(), Box<dyn
         blocked.entries[0].outcome,
         TrashOutcome::Skipped { .. }
     ));
-    lease.finish(zhold_core::BuildOutcome::Succeeded)?;
+    finish_succeeded(lease)?;
     let retried = store.retry_trash(false)?;
     assert!(matches!(retried.entries[0].outcome, TrashOutcome::Deleted));
     Ok(())

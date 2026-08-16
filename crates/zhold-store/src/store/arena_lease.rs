@@ -8,6 +8,7 @@ use crate::{
     io::measure_tree,
     lock::ExclusiveFileLock,
     store::initialization::ensure_managed_directory,
+    store::lifecycle::LifecycleTransition,
     worktree::WorktreeAdmission,
 };
 
@@ -29,6 +30,7 @@ pub struct ArenaLease {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum LeaseStage {
     Reserved,
+    Spawning,
     Spawned,
     Finalized,
 }
@@ -84,10 +86,25 @@ impl ArenaLease {
     }
 
     /// Records that Cargo was successfully spawned for this reservation.
-    pub fn mark_spawned(&mut self) {
-        if matches!(self.stage, LeaseStage::Reserved) {
-            self.stage = LeaseStage::Spawned;
+    pub fn mark_spawning(&mut self) -> Result<(), StoreError> {
+        if !matches!(self.stage, LeaseStage::Reserved) {
+            return Err(self.invalid_transition("Spawning"));
         }
+        self.store
+            .transition_lifecycle(&self.arena_id, LifecycleTransition::Spawning)?;
+        self.stage = LeaseStage::Spawning;
+        Ok(())
+    }
+
+    /// Durably records that Cargo was successfully created by the operating system.
+    pub fn mark_spawned(&mut self) -> Result<(), StoreError> {
+        if !matches!(self.stage, LeaseStage::Spawning) {
+            return Err(self.invalid_transition("Spawned"));
+        }
+        self.store
+            .transition_lifecycle(&self.arena_id, LifecycleTransition::Spawned)?;
+        self.stage = LeaseStage::Spawned;
+        Ok(())
     }
 
     /// Records the child process outcome and releases the lease.
@@ -106,14 +123,25 @@ impl ArenaLease {
 
     /// Records an admitted command that failed before Cargo was spawned.
     pub fn finish_not_started(self) -> Result<BuildFinalization, StoreError> {
-        self.finish_aborted()
+        if !matches!(self.stage, LeaseStage::Reserved) {
+            return Err(self.invalid_transition("NotStarted"));
+        }
+        self.finish_observed(BuildOutcome::NotStarted, ByteSize::ZERO)
+    }
+
+    /// Records a process-creation request that the operating system rejected.
+    pub fn finish_spawn_failed(self) -> Result<BuildFinalization, StoreError> {
+        if !matches!(self.stage, LeaseStage::Spawning) {
+            return Err(self.invalid_transition("NotStarted"));
+        }
+        self.finish_observed(BuildOutcome::NotStarted, ByteSize::ZERO)
     }
 
     /// Finalizes an abnormal path according to whether Cargo was ever spawned.
     pub fn finish_aborted(self) -> Result<BuildFinalization, StoreError> {
         let (outcome, observation) = match self.stage {
             LeaseStage::Reserved => (BuildOutcome::NotStarted, ByteSize::ZERO),
-            LeaseStage::Spawned => (
+            LeaseStage::Spawning | LeaseStage::Spawned => (
                 BuildOutcome::Terminated,
                 self.measure().unwrap_or(self.initial_bytes),
             ),
@@ -125,15 +153,11 @@ impl ArenaLease {
     /// Records the bounded high-water observation used by build history.
     pub(crate) fn finish_observed(
         mut self,
-        mut outcome: BuildOutcome,
+        outcome: BuildOutcome,
         high_water_observation: ByteSize,
     ) -> Result<BuildFinalization, StoreError> {
-        if matches!(self.stage, LeaseStage::Spawned) && matches!(outcome, BuildOutcome::NotStarted)
-        {
-            outcome = BuildOutcome::Terminated;
-        }
-        if !matches!(outcome, BuildOutcome::NotStarted) {
-            self.mark_spawned();
+        if !self.stage_allows(outcome) {
+            return Err(self.invalid_transition(&format!("{outcome:?}")));
         }
         ensure_managed_directory(self.store.layout.root(), &self.build_dir)?;
         let final_bytes = self.measure().ok();
@@ -173,6 +197,29 @@ impl ArenaLease {
         drop(self.worktree.take());
     }
 
+    fn stage_allows(&self, outcome: BuildOutcome) -> bool {
+        matches!(
+            (self.stage, outcome),
+            (
+                LeaseStage::Reserved | LeaseStage::Spawning,
+                BuildOutcome::NotStarted
+            ) | (
+                LeaseStage::Spawning | LeaseStage::Spawned,
+                BuildOutcome::Terminated
+            ) | (
+                LeaseStage::Spawned,
+                BuildOutcome::Succeeded | BuildOutcome::Failed(_)
+            )
+        )
+    }
+
+    fn invalid_transition(&self, destination: &str) -> StoreError {
+        StoreError::InvalidLifecycleTransition {
+            arena: self.arena_id.to_string(),
+            transition: format!("{:?} -> {destination}", self.stage),
+        }
+    }
+
     fn learn_reservation(
         &self,
         command_class: zhold_core::CargoCommandClass,
@@ -197,7 +244,7 @@ impl Drop for ArenaLease {
         }
         let outcome = match self.stage {
             LeaseStage::Reserved => BuildOutcome::NotStarted,
-            LeaseStage::Spawned => BuildOutcome::Terminated,
+            LeaseStage::Spawning | LeaseStage::Spawned => BuildOutcome::Terminated,
             LeaseStage::Finalized => return,
         };
         self.stage = LeaseStage::Finalized;

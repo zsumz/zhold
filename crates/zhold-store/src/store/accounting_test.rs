@@ -26,7 +26,7 @@ fn lease_is_authoritative_for_inventory_and_collection() -> Result<(), Box<dyn s
     assert!(blocked.retirements.is_empty());
     assert!(!blocked.budget_met);
 
-    lease.finish(BuildOutcome::Succeeded)?;
+    test_support::finish_succeeded(lease)?;
     let retired = store.collect(CollectionPolicy::new(ByteSize::from_bytes(1)), false)?;
     assert_eq!(retired.retirements.len(), 1);
     assert!(store.inventory()?.arenas.is_empty());
@@ -42,12 +42,13 @@ fn live_reservations_are_admission_accounting_and_clear_on_finish()
     let context = test_support::context(project.path())?;
     let invocation = test_support::invocation(project.path())?;
     let reservation = ByteSize::from_bytes(4_096);
-    let (lease, report) = store.lease_reserved_and_collect(
+    let (mut lease, report) = store.lease_reserved_and_collect(
         &context,
         &invocation,
         reservation,
         CollectionPolicy::new(ByteSize::ZERO),
     )?;
+    test_support::mark_spawned(&mut lease)?;
     let active = store.inventory()?;
 
     assert_eq!(active.reserved, reservation);
@@ -75,9 +76,7 @@ fn raw_cargo_arguments_are_never_persisted_or_exposed() -> Result<(), Box<dyn st
         project.path().to_path_buf(),
     )?;
 
-    store
-        .lease(&context, &invocation)?
-        .finish(BuildOutcome::Succeeded)?;
+    test_support::finish_succeeded(store.lease(&context, &invocation)?)?;
 
     let manifest = fs::read_to_string(store.layout.manifest(context.arena_id()))?;
     let inventory = serde_json::to_string(&store.inventory()?)?;
@@ -97,12 +96,8 @@ fn command_fingerprints_do_not_correlate_across_stores() -> Result<(), Box<dyn s
     let context = test_support::context(project.path())?;
     let invocation = test_support::invocation(project.path())?;
 
-    first
-        .lease(&context, &invocation)?
-        .finish(BuildOutcome::Succeeded)?;
-    second
-        .lease(&context, &invocation)?
-        .finish(BuildOutcome::Succeeded)?;
+    test_support::finish_succeeded(first.lease(&context, &invocation)?)?;
+    test_support::finish_succeeded(second.lease(&context, &invocation)?)?;
 
     let first_fingerprint = &first.inventory()?.arenas[0].command.arguments_fingerprint;
     let second_fingerprint = &second.inventory()?.arenas[0].command.arguments_fingerprint;

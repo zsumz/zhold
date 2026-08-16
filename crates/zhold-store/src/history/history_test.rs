@@ -27,7 +27,8 @@ fn completed_build_publishes_a_private_high_water_receipt() -> Result<(), Box<dy
         worktree,
     )?;
 
-    let lease = store.lease_reserved(&context, &invocation, ByteSize::from_bytes(400))?;
+    let mut lease = store.lease_reserved(&context, &invocation, ByteSize::from_bytes(400))?;
+    test_support::mark_spawned(&mut lease)?;
     let initial = lease.measure()?;
     fs::write(lease.build_dir().join("artifact"), vec![1_u8; 200])?;
     let high_water = initial.saturating_add(ByteSize::from_bytes(300));
@@ -169,7 +170,7 @@ fn publication_failure_cannot_change_a_committed_build() -> Result<(), Box<dyn s
     fs::remove_dir(&receipts)?;
     fs::write(&receipts, b"blocks receipt publication")?;
 
-    let finalization = lease.finish(BuildOutcome::Succeeded)?;
+    let finalization = test_support::finish_succeeded(lease)?;
 
     assert_eq!(finalization.history.len(), 1);
     assert_eq!(finalization.history[0].warnings.len(), 1);

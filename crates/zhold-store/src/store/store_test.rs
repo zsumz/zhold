@@ -8,7 +8,7 @@ use crate::StoreError;
 use crate::{
     io::read_json,
     manifest::{ArenaManifest, StoreMarker},
-    test_support::{context, invocation},
+    test_support::{context, finish_succeeded, invocation, mark_spawned},
 };
 
 use super::Store;
@@ -114,7 +114,7 @@ fn dropped_spawned_lease_records_a_terminated_run() -> Result<(), Box<dyn std::e
     let invocation = invocation(project.path())?;
 
     let mut lease = store.lease(&context, &invocation)?;
-    lease.mark_spawned();
+    mark_spawned(&mut lease)?;
     fs::write(lease.build_dir().join("partial-output"), vec![0_u8; 64])?;
     drop(lease);
 
@@ -135,9 +135,7 @@ fn refuses_to_reuse_an_unfinished_arena_without_a_live_lease()
     let store = Store::open(temporary.path())?;
     let context = context(project.path())?;
     let invocation = invocation(project.path())?;
-    store
-        .lease(&context, &invocation)?
-        .finish(BuildOutcome::Succeeded)?;
+    finish_succeeded(store.lease(&context, &invocation)?)?;
     let manifest_path = store.layout.manifest(context.arena_id());
     let mut manifest: ArenaManifest = read_json(&manifest_path)?;
     manifest.last_started_at = Some(manifest.last_used_at.saturating_add(1));
@@ -162,8 +160,7 @@ fn expired_pins_stop_protecting_an_arena() -> Result<(), Box<dyn std::error::Err
     let store = Store::open(temporary.path())?;
     let context = context(project.path())?;
     let invocation = invocation(project.path())?;
-    let lease = store.lease(&context, &invocation)?;
-    lease.finish(BuildOutcome::Succeeded)?;
+    finish_succeeded(store.lease(&context, &invocation)?)?;
     let expires_at = store.pin_for(context.arena_id(), Some(3_600))?;
     assert!(expires_at.is_some());
     assert_eq!(
@@ -232,8 +229,7 @@ fn enforces_owner_only_store_permissions() -> Result<(), Box<dyn std::error::Err
     let store = Store::open(temporary.path())?;
     let context = context(project.path())?;
     let invocation = invocation(project.path())?;
-    let lease = store.lease(&context, &invocation)?;
-    lease.finish(BuildOutcome::Succeeded)?;
+    finish_succeeded(store.lease(&context, &invocation)?)?;
 
     let expected_owner = nix::unistd::Uid::effective().as_raw();
     for directory in [
@@ -270,8 +266,7 @@ fn rejected_build_substitution_does_not_advance_the_manifest()
     let store = Store::open(temporary.path())?;
     let context = context(project.path())?;
     let invocation = invocation(project.path())?;
-    let lease = store.lease(&context, &invocation)?;
-    lease.finish(BuildOutcome::Succeeded)?;
+    finish_succeeded(store.lease(&context, &invocation)?)?;
     let manifest_path = store.layout.manifest(context.arena_id());
     let before: ArenaManifest = read_json(&manifest_path)?;
     let build = store.layout.build_dir(context.arena_id());

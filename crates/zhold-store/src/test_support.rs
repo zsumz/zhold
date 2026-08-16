@@ -2,7 +2,7 @@ use std::{fs, io, path::Path};
 
 use zhold_core::{ArenaId, BuildOutcome, RepositoryId, ToolchainId, WorkspaceId, WorktreeId};
 
-use crate::{BuildContext, CargoInvocation, Store, StoreError};
+use crate::{ArenaLease, BuildContext, BuildFinalization, CargoInvocation, Store, StoreError};
 
 pub(crate) fn invocation(root: &Path) -> Result<CargoInvocation, StoreError> {
     CargoInvocation::new(
@@ -52,8 +52,20 @@ pub(crate) fn create_idle_arena(
 ) -> Result<(BuildContext, CargoInvocation), Box<dyn std::error::Error>> {
     let context = context(root)?;
     let invocation = invocation(root)?;
-    let lease = store.lease(&context, &invocation)?;
+    let mut lease = store.lease(&context, &invocation)?;
+    lease.mark_spawning()?;
+    lease.mark_spawned()?;
     fs::write(lease.build_dir().join("artifact.rlib"), vec![0_u8; bytes])?;
     lease.finish(BuildOutcome::Succeeded)?;
     Ok((context, invocation))
+}
+
+pub(crate) fn mark_spawned(lease: &mut ArenaLease) -> Result<(), StoreError> {
+    lease.mark_spawning()?;
+    lease.mark_spawned()
+}
+
+pub(crate) fn finish_succeeded(mut lease: ArenaLease) -> Result<BuildFinalization, StoreError> {
+    mark_spawned(&mut lease)?;
+    lease.finish(BuildOutcome::Succeeded)
 }

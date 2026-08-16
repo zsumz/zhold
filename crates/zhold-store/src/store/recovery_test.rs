@@ -37,11 +37,40 @@ fn explicit_suspect_recovery_publishes_an_audit_receipt() -> Result<(), Box<dyn 
     };
     assert_eq!(receipt.arena_id, *context.arena_id());
     assert_eq!(receipt.previous_state, zhold_core::ArenaState::Suspect);
-    assert_eq!(receipt.outcome, BuildOutcome::Terminated);
+    assert_eq!(receipt.outcome, BuildOutcome::NotStarted);
     assert_eq!(receipt.reason, RecoveryReason::ProcessTreeConfirmedStopped);
     assert_eq!(
         receipt.store_schema_version,
         crate::manifest::STORE_SCHEMA_VERSION
     );
+    Ok(())
+}
+
+#[test]
+fn crash_recovery_uses_the_durable_process_stage() -> Result<(), Box<dyn std::error::Error>> {
+    for spawned in [false, true] {
+        let store_root = tempdir()?;
+        let project = tempdir()?;
+        let store = Store::open(store_root.path())?;
+        let (context, _) = create_idle_arena(&store, project.path(), 64)?;
+        let path = store.layout.manifest(context.arena_id());
+        let mut manifest: ArenaManifest = read_json(&path)?;
+        manifest.begin(
+            &context,
+            CommandDescriptor::default(),
+            ByteSize::from_bytes(128),
+            crate::time::unix_seconds()?,
+        );
+        manifest.mark_spawning()?;
+        if spawned {
+            manifest.mark_spawned()?;
+        }
+        write_json(&path, &manifest)?;
+
+        store.recover_suspect(context.arena_id())?;
+
+        let recovered: ArenaManifest = read_json(&path)?;
+        assert_eq!(recovered.last_outcome, Some(BuildOutcome::Terminated));
+    }
     Ok(())
 }

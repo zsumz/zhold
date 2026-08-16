@@ -7,9 +7,10 @@ use zhold_core::{
     WorktreeId,
 };
 
+use super::ArenaLifecycleStage;
 use crate::{BuildContext, StoreError};
 
-pub(crate) const ARENA_SCHEMA_VERSION: u32 = 6;
+pub(crate) const ARENA_SCHEMA_VERSION: u32 = 7;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(crate) struct ArenaManifest {
@@ -32,6 +33,8 @@ pub(crate) struct ArenaManifest {
     pub(crate) last_used_at: u64,
     pub(crate) last_started_at: Option<u64>,
     pub(crate) last_finished_at: Option<u64>,
+    #[serde(default)]
+    pub(crate) lifecycle_stage: Option<ArenaLifecycleStage>,
     #[serde(default)]
     pub(crate) command: CommandDescriptor,
     pub(crate) last_outcome: Option<BuildOutcome>,
@@ -70,6 +73,7 @@ impl ArenaManifest {
             last_used_at: now,
             last_started_at: None,
             last_finished_at: None,
+            lifecycle_stage: Some(ArenaLifecycleStage::Finalized),
             command: CommandDescriptor::default(),
             last_outcome: None,
             pinned: false,
@@ -170,29 +174,11 @@ impl ArenaManifest {
         self.last_used_at = now;
         self.last_started_at = Some(now);
         self.last_finished_at = None;
+        self.lifecycle_stage = Some(ArenaLifecycleStage::Reserved);
         self.command = command;
         self.last_outcome = None;
         self.reservation = reservation;
         self.retirement_id = None;
-    }
-
-    pub(crate) fn finish(
-        &mut self,
-        outcome: BuildOutcome,
-        high_water_observation: ByteSize,
-        final_bytes: Option<ByteSize>,
-        now: u64,
-    ) {
-        self.schema_version = ARENA_SCHEMA_VERSION;
-        self.revision = self.revision.saturating_add(1);
-        self.last_used_at = now;
-        self.last_finished_at = Some(now);
-        self.last_outcome = Some(outcome);
-        self.reservation = ByteSize::ZERO;
-        self.last_observed_size = high_water_observation;
-        if let Some(final_bytes) = final_bytes {
-            self.last_known_size = Some(final_bytes);
-        }
     }
 
     pub(crate) fn observe_size(&mut self, size: ByteSize) {
@@ -215,10 +201,6 @@ impl ArenaManifest {
             && self
                 .pin_expires_at
                 .is_none_or(|expires_at| expires_at > now)
-    }
-
-    pub(crate) const fn is_unfinished(&self) -> bool {
-        self.last_started_at.is_some() && self.last_finished_at.is_none()
     }
 
     pub(crate) fn prepare_retirement(&mut self, retirement_id: Uuid) {

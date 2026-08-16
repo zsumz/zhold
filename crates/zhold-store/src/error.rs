@@ -112,6 +112,14 @@ pub enum StoreError {
     /// An arena recovery was requested for an arena that is not suspect.
     #[error("managed arena `{0}` is not awaiting suspect-build recovery")]
     ArenaNotSuspect(String),
+    /// A lifecycle operation did not match the arena's durable execution stage.
+    #[error("invalid lifecycle transition for arena `{arena}`: {transition}")]
+    InvalidLifecycleTransition {
+        /// Arena whose state machine rejected the transition.
+        arena: String,
+        /// Rejected source and destination description.
+        transition: String,
+    },
     /// A registered worktree lifecycle state denies new builds.
     #[error("worktree admission is blocked for `{path}`: {state}")]
     WorktreeAdmissionBlocked {

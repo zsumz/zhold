@@ -1,4 +1,4 @@
-use zhold_core::{ArenaId, BuildOutcome};
+use zhold_core::ArenaId;
 
 use crate::{
     HistoryWrite, Store, StoreError,
@@ -38,16 +38,12 @@ impl Store {
             .unwrap_or(last_known)
             .max(manifest.last_observed_size)
             .max(last_known);
-        manifest.finish(
-            BuildOutcome::Terminated,
-            high_water,
-            measured,
-            unix_seconds()?,
-        );
+        let outcome = manifest.recovery_outcome();
+        manifest.finish(outcome, high_water, measured, unix_seconds()?)?;
         write_json(&manifest_path, &manifest)?;
         drop(metadata);
         drop(arena_lock);
         drop(collection);
-        Ok(persist(self, HistoryDraft::recovery(id.clone())))
+        Ok(persist(self, HistoryDraft::recovery(id.clone(), outcome)))
     }
 }

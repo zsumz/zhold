@@ -7,12 +7,15 @@ mod doctor;
 mod finalization;
 mod history;
 mod initialization;
+mod lifecycle;
 mod opening;
 mod recovery;
 mod service;
 
 #[cfg(test)]
 mod accounting_test;
+#[cfg(test)]
+mod lifecycle_test;
 #[cfg(test)]
 mod recovery_test;
 #[cfg(test)]

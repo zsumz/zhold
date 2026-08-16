@@ -20,6 +20,8 @@ use signal_hook::{
     iterator::{Handle, Signals},
 };
 
+use super::SpawnError;
+
 #[derive(Debug)]
 pub(in crate::command::cargo) struct PlatformSupervisor {
     child: GroupChild,
@@ -32,11 +34,14 @@ pub(in crate::command::cargo) struct PlatformSupervisor {
 impl PlatformSupervisor {
     pub(in crate::command::cargo) fn spawn(
         command: &mut Command,
-        spawned: impl FnOnce(),
-    ) -> io::Result<Self> {
-        let signals = Signals::new([SIGINT, SIGTERM, SIGHUP, SIGQUIT])?;
-        let mut child = command.group_spawn()?;
-        spawned();
+        spawned: impl FnOnce() -> io::Result<()>,
+    ) -> Result<Self, SpawnError> {
+        let signals =
+            Signals::new([SIGINT, SIGTERM, SIGHUP, SIGQUIT]).map_err(SpawnError::before_child)?;
+        let mut child = command.group_spawn().map_err(SpawnError::before_child)?;
+        if let Err(error) = spawned() {
+            return cleanup_failed_spawn(&mut child, error);
+        }
         let group = match process_group(child.id()) {
             Ok(group) => group,
             Err(error) => return cleanup_failed_spawn(&mut child, error),
@@ -98,10 +103,10 @@ impl Drop for PlatformSupervisor {
 fn cleanup_failed_spawn(
     child: &mut GroupChild,
     setup_error: io::Error,
-) -> io::Result<PlatformSupervisor> {
+) -> Result<PlatformSupervisor, SpawnError> {
     let _kill = child.kill();
     let _wait = child.wait();
-    Err(setup_error)
+    Err(SpawnError::after_child(setup_error))
 }
 
 #[derive(Debug)]

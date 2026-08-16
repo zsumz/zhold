@@ -25,7 +25,8 @@ fn removal_gate_blocks_active_and_future_builds() -> Result<(), Box<dyn std::err
     assert_eq!(ready.result, HookResult::Changed);
 
     let invocation = test_support::invocation(&root)?;
-    let lease = store.lease(&context, &invocation)?;
+    let mut lease = store.lease(&context, &invocation)?;
+    test_support::mark_spawned(&mut lease)?;
     let active = store.hook_prepare_remove(&root, Some("worktrunk".to_owned()))?;
     assert_eq!(active.result, HookResult::ActiveBuild);
     assert_eq!(active.resulting, Some(WorktreeIntegrationState::Ready));
@@ -44,9 +45,7 @@ fn removal_gate_blocks_active_and_future_builds() -> Result<(), Box<dyn std::err
 
     let cancelled = store.hook_cancel_remove(&worktree, None)?;
     assert_eq!(cancelled.resulting, Some(WorktreeIntegrationState::Ready));
-    store
-        .lease(&context, &invocation)?
-        .finish(BuildOutcome::Succeeded)?;
+    test_support::finish_succeeded(store.lease(&context, &invocation)?)?;
     Ok(())
 }
 

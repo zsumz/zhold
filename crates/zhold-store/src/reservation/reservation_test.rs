@@ -1,7 +1,7 @@
 use std::fs;
 
 use tempfile::tempdir;
-use zhold_core::{BuildOutcome, ByteSize};
+use zhold_core::{BuildOutcome, ByteSize, CommandDescriptor};
 
 use crate::{CargoInvocation, Store, io::read_json, manifest::ArenaManifest, test_support};
 
@@ -19,7 +19,8 @@ fn completed_growth_increases_the_next_command_reservation()
         ByteSize::from_bytes(1)
     );
 
-    let lease = store.lease(&context, &invocation)?;
+    let mut lease = store.lease(&context, &invocation)?;
+    test_support::mark_spawned(&mut lease)?;
     fs::write(lease.build_dir().join("growth"), vec![1_u8; 512])?;
     let peak = lease.measure()?;
     let _finalization = lease.finish_observed(BuildOutcome::Succeeded, peak)?;
@@ -60,7 +61,8 @@ fn advisory_learning_failure_preserves_the_committed_outcome()
     let store = Store::open(temporary.path().join("store"))?;
     let context = test_support::context(project.path())?;
     let invocation = test_support::invocation(project.path())?;
-    let lease = store.lease(&context, &invocation)?;
+    let mut lease = store.lease(&context, &invocation)?;
+    test_support::mark_spawned(&mut lease)?;
     fs::create_dir(store.layout.reservation_profile())?;
 
     let finalization = lease.finish(BuildOutcome::Succeeded)?;
@@ -102,9 +104,12 @@ fn a_spawned_command_cannot_be_finalized_as_not_started() -> Result<(), Box<dyn 
     let context = test_support::context(project.path())?;
     let invocation = test_support::invocation(project.path())?;
     let mut lease = store.lease(&context, &invocation)?;
-    lease.mark_spawned();
+    test_support::mark_spawned(&mut lease)?;
 
-    lease.finish_not_started()?;
+    assert!(matches!(
+        lease.finish_not_started(),
+        Err(crate::StoreError::InvalidLifecycleTransition { .. })
+    ));
 
     let manifest: ArenaManifest = read_json(&store.layout.manifest(context.arena_id()))?;
     assert_eq!(manifest.last_outcome, Some(BuildOutcome::Terminated));
@@ -121,12 +126,20 @@ fn absent_final_measurement_preserves_the_durable_size() -> Result<(), Box<dyn s
     let mut manifest: ArenaManifest = read_json(&store.layout.manifest(context.arena_id()))?;
     let durable = manifest.last_known_size;
 
+    manifest.begin(
+        &context,
+        CommandDescriptor::default(),
+        ByteSize::ZERO,
+        manifest.last_used_at.saturating_add(1),
+    );
+    manifest.mark_spawning()?;
+    manifest.mark_spawned()?;
     manifest.finish(
         BuildOutcome::Terminated,
         durable.unwrap_or_default(),
         None,
         manifest.last_used_at.saturating_add(1),
-    );
+    )?;
 
     assert_eq!(manifest.last_known_size, durable);
     Ok(())

@@ -127,14 +127,21 @@ fn execute_managed(
         .current_dir(invocation.working_directory())
         .env("CARGO_BUILD_BUILD_DIR", lease.build_dir())
         .env_remove(SENTINEL_ENV);
-    let child = supervisor::CargoSupervisor::spawn(&mut command, || lease.mark_spawned());
+    lease.mark_spawning()?;
+    let child = supervisor::CargoSupervisor::spawn(&mut command, || {
+        lease.mark_spawned().map_err(std::io::Error::other)
+    });
     let mut child = match child {
         Ok(value) => value,
-        Err(source) => {
-            finish_after_error(lease, format)?;
+        Err(failure) => {
+            if failure.child_created() {
+                finish_after_error(lease, format)?;
+            } else {
+                finish_after_spawn_failure(lease, format)?;
+            }
             return Err(CliError::Spawn {
                 directory: working_directory,
-                source: Box::new(source),
+                source: Box::new(failure.into_source()),
             });
         }
     };
@@ -203,6 +210,15 @@ fn finish_after_error(
     format: OutputFormat,
 ) -> Result<(), CliError> {
     let finalization = lease.finish_aborted()?;
+    let _ignored = render::history_finalization(&finalization, format);
+    Ok(())
+}
+
+fn finish_after_spawn_failure(
+    lease: zhold_store::ArenaLease,
+    format: OutputFormat,
+) -> Result<(), CliError> {
+    let finalization = lease.finish_spawn_failed()?;
     let _ignored = render::history_finalization(&finalization, format);
     Ok(())
 }

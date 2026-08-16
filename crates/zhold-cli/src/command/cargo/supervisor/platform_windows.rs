@@ -14,6 +14,8 @@ use signal_hook::{
     flag,
 };
 
+use super::SpawnError;
+
 #[derive(Debug)]
 pub(in crate::command::cargo) struct PlatformSupervisor {
     child: GroupChild,
@@ -25,18 +27,24 @@ pub(in crate::command::cargo) struct PlatformSupervisor {
 impl PlatformSupervisor {
     pub(in crate::command::cargo) fn spawn(
         command: &mut Command,
-        spawned: impl FnOnce(),
-    ) -> io::Result<Self> {
+        spawned: impl FnOnce() -> io::Result<()>,
+    ) -> Result<Self, SpawnError> {
         let interrupted = Arc::new(AtomicBool::new(false));
-        let signal_ids = register_handlers(&interrupted)?;
+        let signal_ids = register_handlers(&interrupted).map_err(SpawnError::before_child)?;
         let child = match command.group().kill_on_drop(true).spawn() {
             Ok(child) => child,
             Err(error) => {
                 unregister_handlers(signal_ids);
-                return Err(error);
+                return Err(SpawnError::before_child(error));
             }
         };
-        spawned();
+        if let Err(error) = spawned() {
+            let mut child = child;
+            let _kill = child.kill();
+            let _wait = child.wait();
+            unregister_handlers(signal_ids);
+            return Err(SpawnError::after_child(error));
+        }
         Ok(Self {
             child,
             signal_ids,

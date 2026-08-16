@@ -12,7 +12,7 @@ use crate::{
     Store, StoreError,
     io::{read_json, write_json},
     manifest::ArenaManifest,
-    test_support::create_idle_arena,
+    test_support::{create_idle_arena, finish_succeeded},
 };
 
 use super::collector::{RetirementAttempt, accounted_bytes, budget_is_confirmed, retire};
@@ -80,7 +80,7 @@ fn a_lease_acquired_after_planning_blocks_retirement() -> Result<(), Box<dyn std
 
     assert!(matches!(result, RetirementAttempt::Skipped(reason) if reason.contains("live lease")));
     assert!(store.layout.arena(context.arena_id()).is_dir());
-    lease.finish(zhold_core::BuildOutcome::Succeeded)?;
+    finish_succeeded(lease)?;
     Ok(())
 }
 

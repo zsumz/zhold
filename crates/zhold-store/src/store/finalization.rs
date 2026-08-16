@@ -46,7 +46,7 @@ impl Store {
             high_water_observation,
             Some(final_bytes),
             finished_seconds,
-        );
+        )?;
         let publication = write_json_commit_aware(&manifest_path, &manifest)?;
         let (warnings, durability_error) = match publication {
             JsonPublication::Durable { cleanup_warning } => (

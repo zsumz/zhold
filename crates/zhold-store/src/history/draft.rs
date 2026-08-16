@@ -7,13 +7,16 @@ use super::{
 use crate::{CollectionReport, HookReport, QuotaStatus, WorktreeIntegration};
 
 impl HistoryDraft {
-    pub(crate) fn recovery(arena_id: zhold_core::ArenaId) -> Self {
+    pub(crate) fn recovery(
+        arena_id: zhold_core::ArenaId,
+        outcome: zhold_core::BuildOutcome,
+    ) -> Self {
         Self {
             kind: HistoryKind::Recovery,
             payload: HistoryPayload::Recovery(RecoveryReceipt {
                 arena_id,
                 previous_state: zhold_core::ArenaState::Suspect,
-                outcome: zhold_core::BuildOutcome::Terminated,
+                outcome,
                 reason: RecoveryReason::ProcessTreeConfirmedStopped,
                 store_schema_version: crate::manifest::STORE_SCHEMA_VERSION,
             }),

@@ -54,7 +54,8 @@ fn contended_admission_does_not_hold_the_collection_lock() -> Result<(), Box<dyn
     let store = Store::open(store_root.path())?;
     let context = test_support::context(project.path())?;
     let invocation = test_support::invocation(project.path())?;
-    let first = store.lease(&context, &invocation)?;
+    let mut first = store.lease(&context, &invocation)?;
+    test_support::mark_spawned(&mut first)?;
     let contender_store = store.clone();
     let contender_context = context.clone();
     let contender_invocation = invocation.clone();
@@ -62,7 +63,7 @@ fn contended_admission_does_not_hold_the_collection_lock() -> Result<(), Box<dyn
     let contender = thread::spawn(move || {
         let _ignored = started_tx.send(());
         let lease = contender_store.lease(&contender_context, &contender_invocation)?;
-        lease.finish(BuildOutcome::Succeeded)
+        test_support::finish_succeeded(lease)
     });
     started_rx.recv_timeout(Duration::from_secs(1))?;
     thread::sleep(Duration::from_millis(50));
