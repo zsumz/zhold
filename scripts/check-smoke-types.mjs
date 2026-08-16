@@ -9,7 +9,7 @@ const temporary = await mkdtemp(join(tmpdir(), "zhold-smoke-types-"));
 
 try {
   await cp(join(repoRoot, "smoke"), join(temporary, "smoke"), { recursive: true });
-  run(process.platform === "win32" ? "npm.cmd" : "npm", [
+  runNpm([
     "install",
     "--ignore-scripts",
     "--no-audit",
@@ -74,4 +74,18 @@ function run(command, arguments_) {
   if (result.status !== 0) {
     throw new Error(`${command} failed with status ${String(result.status)}`);
   }
+}
+
+function runNpm(arguments_) {
+  if (process.platform === "win32") {
+    run(process.env.ComSpec ?? "cmd.exe", [
+      "/d",
+      "/s",
+      "/c",
+      "npm.cmd",
+      ...arguments_,
+    ]);
+    return;
+  }
+  run("npm", arguments_);
 }
