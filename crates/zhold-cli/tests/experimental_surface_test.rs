@@ -117,6 +117,7 @@ fn quota_status_and_plan_are_non_privileged_and_non_mutating()
 -> Result<(), Box<dyn std::error::Error>> {
     let temporary = tempdir()?;
     let store = temporary.path().join("store");
+    zhold_store::Store::open(&store)?;
 
     let status = zhold(
         &store,
