@@ -3,6 +3,11 @@
 Locks are ordinary operating-system file locks stored outside arena trees. They
 are process-authoritative and release when the owning process dies.
 
+Read-only inspection never creates a lock file. It uses noncreating probes for
+live-lease observations and accepts a point-in-time dry-run snapshot without a
+writable collection lock. Every real mutation is rejected by the Store
+capability gate before lock acquisition when the handle was opened read-only.
+
 ## Lock roles
 
 | Lock | Role |

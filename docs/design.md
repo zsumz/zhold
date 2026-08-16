@@ -36,7 +36,7 @@ from gaining arena-manifest access.
 ## Arena lifecycle
 
 ```text
-absent -> initialized -> active -> idle/failed -> retired -> deleted
+absent -> staged -> reserved -> spawning -> spawned -> finalized -> retired -> deleted
                          |   |         |
                          |   +-> suspect (explicit recovery required)
                          +------> pinned
@@ -82,6 +82,9 @@ zhold resolves Cargo metadata using the effective leading toolchain and global
 options, including `--manifest-path`, `-C`, and `--config`. Relevant config files
 and compiler selection participate in compatibility identity. The managed
 `build.build-dir` override is appended at final command-line precedence.
+Recursive file-based `include` values are source-relative and identity-bearing;
+inline `--config` values containing `include` are rejected as an explicit
+compatibility limit.
 
 Final artifacts continue to use Cargo's workspace target directory; zhold owns
 only the separate intermediate build directory introduced in Cargo 1.91.
@@ -93,7 +96,19 @@ process group and forwards termination signals. On Windows it owns a Job Object.
 The lease is released only after the owned process tree exits and primary state
 is durably finalized.
 
+The manifest persists `Reserved`, `Spawning`, `Spawned`, and `Finalized`, so
+restart recovery never has to infer whether process creation was attempted from
+timestamps. New arenas are assembled and synchronized in a journal-authorized
+staging directory before atomic promotion into the owned arena namespace.
+
 Exit zero means Cargo succeeded, primary finalization succeeded, and mandatory
 post-build collection completed without losing zhold's lifecycle guarantees.
 Cargo failures preserve Cargo's code; zhold management failures use a distinct
 nonzero code.
+
+## Read-only contract
+
+Status, deep status, doctor, scan, explain, and GC dry-run open only an existing
+store. They do not initialize layout, probe filesystem publication capability,
+create lock files, repair metadata, or publish receipts. Mutating Store methods
+reject a read-only handle before acquiring writable locks or touching metadata.
