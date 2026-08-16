@@ -20,7 +20,7 @@ smoke.suite("installed interruption", async (t) => {
     await addInterruptBuildScript(t, created.repository);
     return created;
   });
-  const launcher = await t.step("compile a terminal process-group launcher", async () =>
+  const launcher = await t.step("compile a process-group launcher", async () =>
     createProcessGroupLauncher(t, work)
   );
 
@@ -50,17 +50,20 @@ smoke.suite("installed interruption", async (t) => {
     )
   );
 
-  await t.step("forward SIGINT through Cargo descendants", async () => {
+  await t.step("forward termination through Cargo descendants", async () => {
     const pid = (await t.fs.readText(zholdPid)).trim();
-    await t.cmd("kill", ["-INT", `-${pid}`]);
-    await t.poll(
-      "interrupted Cargo finalization",
-      () => front.stderr().includes('"event":"cargo_finished"'),
-      { timeout: "20s" },
-    );
-    const finish = parseCargoFinish(t, front.stderr());
-    expect.value(finish.outcome).toBe("terminated");
-    await front.stop();
+    try {
+      await t.cmd("kill", ["-TERM", `-${pid}`]);
+      await t.poll(
+        "interrupted Cargo finalization",
+        () => front.stderr().includes('"event":"cargo_finished"'),
+        { timeout: "20s" },
+      );
+      const finish = parseCargoFinish(t, front.stderr());
+      expect.value(finish.outcome).toBe("terminated");
+    } finally {
+      await front.stop();
+    }
   });
 
   await t.step("clear the lease and descendant", async () => {

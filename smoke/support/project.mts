@@ -46,10 +46,12 @@ export async function addWaitingBuildScript(
 ): Promise<void> {
   await t.fs.writeText(
     join(repository, "build.rs"),
-    `use std::{path::Path, thread, time::Duration};
+    `use std::{env, fs, path::Path, thread, time::Duration};
 
 fn main() {
-    let release = std::env::var("ZHOLD_SMOKE_RELEASE").expect("release path");
+    let ready = env::var("ZHOLD_SMOKE_READY").expect("ready path");
+    let release = env::var("ZHOLD_SMOKE_RELEASE").expect("release path");
+    fs::write(ready, "ready\n").expect("write ready marker");
     while !Path::new(&release).is_file() {
         thread::sleep(Duration::from_millis(10));
     }

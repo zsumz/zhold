@@ -17,6 +17,7 @@ smoke.suite("concurrent admission", async (t) => {
   const secondProject = await t.step("create the competing build", async () =>
     createRepositoryFixture(t, work, "second-repository")
   );
+  const ready = work.path("first-build-ready");
   const release = work.path("release-first-build");
   const limits = [
     "--budget",
@@ -34,9 +35,12 @@ smoke.suite("concurrent admission", async (t) => {
       ["--store", firstProject.store, "--format", "json", ...limits],
       {
         cwd: firstProject.repository,
-        env: { ZHOLD_SMOKE_RELEASE: release },
+        env: {
+          ZHOLD_SMOKE_READY: ready,
+          ZHOLD_SMOKE_RELEASE: release,
+        },
         name: "reserved-build",
-        ready: t.log.contains('"event":"cargo_started"', { stream: "stderr" }),
+        ready: t.fs.ready(ready),
         timeout: "20s",
       },
     )

@@ -1,5 +1,8 @@
+import { realpath } from "node:fs/promises";
+
 import { expect, smoke } from "smoque";
 
+import { normalizePathText } from "./support/path.mts";
 import { readInventory, runZhold, setupZhold } from "./support/zhold.mts";
 
 smoke.suite("foreign Cargo target safety", async (t) => {
@@ -19,7 +22,8 @@ smoke.suite("foreign Cargo target safety", async (t) => {
   await t.step("report the foreign target", async () => {
     const result = await runZhold(t, store, work, ["scan", projects]);
     expect.value(result.stdout).toContain("foreign Cargo targets: 1");
-    expect.value(result.stdout).toContain(target);
+    expect.value(normalizePathText(result.stdout))
+      .toContain(normalizePathText(await realpath(target)));
   });
 
   await t.step("leave every foreign byte unchanged", async () => {
