@@ -1,6 +1,7 @@
 //! Private crash-aware metadata and no-follow filesystem operations.
 
 mod json_create;
+mod json_document;
 mod json_file;
 mod json_path;
 mod json_publish;
@@ -12,12 +13,15 @@ mod json_chain_test;
 #[cfg(test)]
 mod json_file_test;
 #[cfg(test)]
+pub(crate) mod json_recovery_test;
+#[cfg(test)]
 mod tree_test;
 
 pub(crate) use json_create::{JsonCreation, create_json, create_json_commit_aware};
+pub(crate) use json_document::{read_optional_json, secure_json_document, upsert_json};
 pub(crate) use json_file::{read_json, remove_json, write_json, write_json_commit_aware};
 pub(crate) use json_path::{
-    backup_path as json_backup_path, backup_primary_path as json_backup_primary_path,
+    backup_primary_path as json_backup_primary_path,
     is_publication_artifact as is_json_publication_artifact,
     is_staging_path as is_json_staging_path,
 };

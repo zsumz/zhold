@@ -9,7 +9,7 @@ use super::{
 };
 use crate::{
     Store, StoreError,
-    io::{is_json_publication_artifact, read_json},
+    io::{is_json_publication_artifact, read_json, read_optional_json},
 };
 
 #[derive(Clone, Debug)]
@@ -21,19 +21,9 @@ pub(crate) struct ValidatedReceipt {
 
 pub(crate) fn history_policy(store: &Store) -> Result<HistoryPolicy, StoreError> {
     let path = store.layout.history_policy();
-    match fs::symlink_metadata(&path) {
-        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
-            Err(StoreError::InvalidOwnership {
-                path,
-                reason: "history policy is not a real file".to_owned(),
-            })
-        }
-        Ok(_) => {
-            let document: HistoryPolicyDocument = read_json(&path)?;
-            validate_policy(store, &document, &path)
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(HistoryPolicy::default()),
-        Err(error) => Err(StoreError::io("inspect history policy", path, error)),
+    match read_optional_json::<HistoryPolicyDocument>(&path)? {
+        Some(document) => validate_policy(store, &document, &path),
+        None => Ok(HistoryPolicy::default()),
     }
 }
 

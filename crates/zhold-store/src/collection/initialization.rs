@@ -6,7 +6,8 @@ use crate::{
     Store, StoreError,
     inventory::ensure_real_contained_directory,
     io::{
-        is_json_publication_artifact, measure_tree, read_json, remove_json, remove_tree, write_json,
+        is_json_publication_artifact, measure_tree, read_json, read_optional_json, remove_json,
+        remove_tree, write_json,
     },
     lock::ExclusiveFileLock,
     manifest::{ArenaManifest, InitializationRecord},
@@ -73,12 +74,10 @@ fn reconcile_staged(
 ) -> Result<(), StoreError> {
     ensure_real_contained_directory(record.staging_path(), root)?;
     let manifest_path = record.staging_path().join("arena.json");
-    if matches!(fs::symlink_metadata(&manifest_path), Err(error) if error.kind() == std::io::ErrorKind::NotFound)
-    {
+    let Some(mut manifest): Option<ArenaManifest> = read_optional_json(&manifest_path)? else {
         remove_tree(record.staging_path())?;
         return remove_json(record_path);
-    }
-    let mut manifest: ArenaManifest = read_json(&manifest_path)?;
+    };
     manifest.validate(
         store.marker.store_id,
         record.arena_id(),

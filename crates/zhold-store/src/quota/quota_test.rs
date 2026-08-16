@@ -63,6 +63,28 @@ fn adopted_expectation_matches_exact_identity_and_limit() -> Result<(), Box<dyn 
 }
 
 #[test]
+fn backup_only_quota_expectation_remains_authoritative() -> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let store = Store::open(temporary.path().join("store"))?;
+    write_expectation(&store, ByteSize::from_bytes(1_000))?;
+    crate::io::json_recovery_test::rotate_to_backup(&store.layout.quota())?;
+    let probe = FakeProbe {
+        observation: configured(
+            &store,
+            ByteSize::from_bytes(200),
+            ByteSize::from_bytes(1_000),
+        ),
+    };
+
+    let status = super::service::quota_status_with_probe(&store, QuotaProvider::Auto, &probe)?;
+
+    assert!(status.healthy);
+    assert_eq!(status.remaining, Some(ByteSize::from_bytes(800)));
+    assert!(status.expectation.is_some());
+    Ok(())
+}
+
+#[test]
 fn adopted_limit_or_filesystem_drift_fails_closed() -> Result<(), Box<dyn std::error::Error>> {
     let temporary = tempdir()?;
     let store = Store::open(temporary.path().join("store"))?;

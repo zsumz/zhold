@@ -60,3 +60,35 @@ fn config_patch_preserves_unspecified_values() -> Result<(), Box<dyn std::error:
     assert_eq!(store.config()?, merged);
     Ok(())
 }
+
+#[test]
+fn backup_only_configuration_survives_reopen_and_patch() -> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let root = temporary.path().join("store");
+    let store = Store::open(&root)?;
+    let config = StoreConfig {
+        arena_budget: Some(ByteSize::from_bytes(200)),
+        min_filesystem_free: Some(ByteSize::from_bytes(25)),
+        minimum_build_reservation: Some(ByteSize::from_bytes(10)),
+    };
+    store.set_config(config)?;
+    crate::io::json_recovery_test::rotate_to_backup(&store.layout.config())?;
+    drop(store);
+
+    assert_eq!(Store::open_read_only(&root)?.config()?, config);
+    let writable = Store::open_read_write(&root)?;
+    assert_eq!(writable.config()?, config);
+    let patched = writable.patch_config(StoreConfig {
+        arena_budget: Some(ByteSize::from_bytes(300)),
+        ..StoreConfig::default()
+    })?;
+
+    assert_eq!(patched.arena_budget, Some(ByteSize::from_bytes(300)));
+    assert_eq!(patched.min_filesystem_free, config.min_filesystem_free);
+    assert_eq!(
+        patched.minimum_build_reservation,
+        config.minimum_build_reservation
+    );
+    assert_eq!(writable.config()?, patched);
+    Ok(())
+}

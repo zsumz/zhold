@@ -10,6 +10,8 @@ mod writer;
 
 #[cfg(test)]
 mod history_test;
+#[cfg(test)]
+mod recovery_test;
 
 pub(crate) use model::HistoryDraft;
 pub use model::{

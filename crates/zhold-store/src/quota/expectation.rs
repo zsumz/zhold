@@ -1,9 +1,7 @@
-use std::fs;
-
 use zhold_core::QuotaProvider;
 
 use super::QuotaExpectation;
-use crate::{Store, StoreError, io::read_json};
+use crate::{Store, StoreError, io::read_optional_json};
 
 const MAX_PROVIDER_IDENTITY_BYTES: usize = 4_096;
 
@@ -15,19 +13,9 @@ pub(crate) fn valid_identity(value: &str) -> bool {
 
 pub(crate) fn read_expectation(store: &Store) -> Result<Option<QuotaExpectation>, StoreError> {
     let path = store.layout.quota();
-    match fs::symlink_metadata(&path) {
-        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_file() => {
-            Err(StoreError::InvalidOwnership {
-                path,
-                reason: "quota expectation is not a real file".to_owned(),
-            })
-        }
-        Ok(_) => {
-            let expectation: QuotaExpectation = read_json(&path)?;
-            validate(store, expectation, path).map(Some)
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(StoreError::io("inspect quota expectation", path, error)),
+    match read_optional_json::<QuotaExpectation>(&path)? {
+        Some(expectation) => validate(store, expectation, path).map(Some),
+        None => Ok(None),
     }
 }
 

@@ -1,5 +1,3 @@
-use std::{fs, io};
-
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use zhold_core::ByteSize;
@@ -7,7 +5,7 @@ use zhold_core::ByteSize;
 use super::StoreConfig;
 use crate::{
     Store, StoreError,
-    io::{create_json, read_json, write_json},
+    io::{read_optional_json, upsert_json},
     lock::ExclusiveFileLock,
 };
 
@@ -64,20 +62,13 @@ fn persist_config(store: &Store, config: StoreConfig) -> Result<(), StoreError> 
         config,
     };
     let path = store.layout.config();
-    if path.exists() {
-        write_json(&path, &document)
-    } else if create_json(&path, &document)? {
-        Ok(())
-    } else {
-        write_json(&path, &document)
-    }
+    upsert_json(&path, &document)
 }
 
 fn read_config(store: &Store) -> Result<StoreConfig, StoreError> {
     let path = store.layout.config();
-    match fs::symlink_metadata(&path) {
-        Ok(_) => {
-            let document: ConfigDocument = read_json(&path)?;
+    match read_optional_json::<ConfigDocument>(&path)? {
+        Some(document) => {
             if document.schema_version != SCHEMA_VERSION
                 || document.store_id != store.marker.store_id
             {
@@ -88,8 +79,7 @@ fn read_config(store: &Store) -> Result<StoreConfig, StoreError> {
             validate_config(document.config)?;
             Ok(document.config)
         }
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(StoreConfig::default()),
-        Err(error) => Err(StoreError::io("inspect store configuration", path, error)),
+        None => Ok(StoreConfig::default()),
     }
 }
 

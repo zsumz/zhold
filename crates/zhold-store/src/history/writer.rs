@@ -9,7 +9,7 @@ use super::{
 };
 use crate::{
     Store, StoreError,
-    io::{create_json, write_json},
+    io::{create_json, upsert_json},
     lock::ExclusiveFileLock,
     time::unix_milliseconds,
 };
@@ -93,11 +93,5 @@ pub(crate) fn set_policy(store: &Store, policy: HistoryPolicy) -> Result<(), Sto
         store_id: store.marker.store_id,
         policy,
     };
-    if path.exists() {
-        write_json(&path, &document)
-    } else if create_json(&path, &document)? {
-        Ok(())
-    } else {
-        write_json(&path, &document)
-    }
+    upsert_json(&path, &document)
 }

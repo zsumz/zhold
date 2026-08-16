@@ -54,6 +54,27 @@ fn profile_uses_p95_and_previous_growth() -> Result<(), Box<dyn std::error::Erro
 }
 
 #[test]
+fn backup_only_profile_preserves_learned_reservations() -> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let store = Store::open(temporary.path().join("store"))?;
+    let invocation = test_support::invocation(temporary.path())?;
+    for growth in 1..=20 {
+        store
+            .record_reservation_growth(invocation.command_class(), ByteSize::from_bytes(growth))?;
+    }
+    crate::io::json_recovery_test::rotate_to_backup(&store.layout.reservation_profile())?;
+
+    let learned = store.recommended_reservation(&invocation, ByteSize::from_bytes(1))?;
+    assert_eq!(learned, ByteSize::from_bytes(20));
+    store.record_reservation_growth(invocation.command_class(), ByteSize::from_bytes(40))?;
+    assert_eq!(
+        store.recommended_reservation(&invocation, ByteSize::from_bytes(1))?,
+        ByteSize::from_bytes(40)
+    );
+    Ok(())
+}
+
+#[test]
 fn advisory_learning_failure_preserves_the_committed_outcome()
 -> Result<(), Box<dyn std::error::Error>> {
     let temporary = tempdir()?;

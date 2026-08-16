@@ -1,11 +1,9 @@
-use std::fs;
-
 use zhold_core::{ByteSize, CargoCommandClass};
 
 use super::ReservationProfile;
 use crate::{
     CargoInvocation, Store, StoreError,
-    io::{create_json, read_json, write_json},
+    io::{read_optional_json, upsert_json},
     lock::ExclusiveFileLock,
 };
 
@@ -40,26 +38,15 @@ impl Store {
 
 fn read_profile(store: &Store) -> Result<ReservationProfile, StoreError> {
     let path = store.layout.reservation_profile();
-    match fs::symlink_metadata(&path) {
-        Ok(_) => {
-            let profile: ReservationProfile = read_json(&path)?;
+    match read_optional_json::<ReservationProfile>(&path)? {
+        Some(profile) => {
             profile.validate(store.marker.store_id)?;
             Ok(profile)
         }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            Ok(ReservationProfile::empty(store.marker.store_id))
-        }
-        Err(error) => Err(StoreError::io("inspect reservation profile", path, error)),
+        None => Ok(ReservationProfile::empty(store.marker.store_id)),
     }
 }
 
 fn persist_profile(store: &Store, profile: &ReservationProfile) -> Result<(), StoreError> {
-    let path = store.layout.reservation_profile();
-    if path.exists() {
-        write_json(&path, profile)
-    } else if create_json(&path, profile)? {
-        Ok(())
-    } else {
-        write_json(&path, profile)
-    }
+    upsert_json(&store.layout.reservation_profile(), profile)
 }

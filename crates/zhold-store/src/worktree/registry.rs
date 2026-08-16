@@ -3,7 +3,7 @@ use std::{fs, path::Path, str::FromStr};
 use zhold_core::{WorktreeId, WorktreeIntegrationState, WorktreeKey};
 
 use super::{WorktreeFinding, WorktreeIntegration, registry_entry};
-use crate::{Store, StoreError, WorktreeContext, io::read_json};
+use crate::{Store, StoreError, WorktreeContext, io::read_optional_json};
 
 pub(crate) fn read_for_context(
     store: &Store,
@@ -27,11 +27,11 @@ pub(crate) fn read(
     key: &WorktreeKey,
 ) -> Result<Option<WorktreeIntegration>, StoreError> {
     let path = store.layout.worktree_integration(key);
-    if registry_entry::document_exists(&path)? {
-        read_path(store, &path).map(Some)
-    } else {
-        Ok(None)
-    }
+    let Some(record) = read_optional_json(&path)? else {
+        return Ok(None);
+    };
+    validate(store, &path, key, &record)?;
+    Ok(Some(record))
 }
 
 pub(crate) fn scan(
@@ -141,7 +141,16 @@ fn read_path(store: &Store, path: &Path) -> Result<WorktreeIntegration, StoreErr
         path: path.to_path_buf(),
         reason: error.to_string(),
     })?;
-    let record: WorktreeIntegration = read_json(path)?;
+    let record: WorktreeIntegration = read_optional_json(path)?.ok_or_else(|| {
+        StoreError::io(
+            "read worktree integration",
+            path,
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "worktree integration does not exist",
+            ),
+        )
+    })?;
     validate(store, path, &key, &record)?;
     Ok(record)
 }

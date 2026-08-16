@@ -8,7 +8,8 @@ use uuid::Uuid;
 use crate::{
     StoreError,
     io::{
-        configure_private_file, create_json, read_json, secure_directory, secure_file, write_json,
+        configure_private_file, create_json, read_json, read_optional_json, secure_directory,
+        secure_json_document, write_json,
     },
     layout::StoreLayout,
     lock::ExclusiveFileLock,
@@ -17,40 +18,27 @@ use crate::{
 
 pub(super) fn open_marker_read_write(layout: &StoreLayout) -> Result<StoreMarker, StoreError> {
     let marker_path = layout.marker();
-    match fs::symlink_metadata(&marker_path) {
-        Ok(metadata) => {
-            if metadata.file_type().is_symlink() || !metadata.is_file() {
-                return Err(StoreError::InvalidOwnership {
-                    path: marker_path,
-                    reason: "store marker is not a real file".to_owned(),
-                });
-            }
-            secure_file(&marker_path)?;
-            let marker: StoreMarker = read_json(&marker_path)?;
-            let marker = if marker.schema_version == 1 {
-                let _initialization = ExclusiveFileLock::acquire(&layout.initialization_lock())?;
-                load_marker(layout)?
-            } else {
-                validate_marker(marker, marker_path)?
-            };
-            Ok(marker)
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => initialize_marker(layout),
-        Err(error) => Err(StoreError::io("inspect store marker", marker_path, error)),
+    if secure_json_document(&marker_path)?.is_absent() {
+        return initialize_marker(layout);
+    }
+    let marker: StoreMarker = read_json(&marker_path)?;
+    if marker.schema_version == 1 {
+        let _initialization = ExclusiveFileLock::acquire(&layout.initialization_lock())?;
+        load_marker(layout)
+    } else {
+        validate_marker(marker, marker_path)
     }
 }
 
 pub(super) fn open_marker_read_only(layout: &StoreLayout) -> Result<StoreMarker, StoreError> {
     let marker_path = layout.marker();
-    let metadata = fs::symlink_metadata(&marker_path)
-        .map_err(|error| StoreError::io("inspect store marker", &marker_path, error))?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() {
-        return Err(StoreError::InvalidOwnership {
-            path: marker_path,
-            reason: "store marker is not a real file".to_owned(),
-        });
-    }
-    let marker = read_json(&marker_path)?;
+    let marker = read_optional_json(&marker_path)?.ok_or_else(|| {
+        StoreError::io(
+            "read store marker",
+            &marker_path,
+            std::io::Error::new(std::io::ErrorKind::NotFound, "store marker does not exist"),
+        )
+    })?;
     validate_marker(marker, marker_path)
 }
 
@@ -83,7 +71,7 @@ fn initialize_marker(layout: &StoreLayout) -> Result<StoreMarker, StoreError> {
         return Err(StoreError::UnmarkedStore(layout.root().to_path_buf()));
     }
     let _initialization = ExclusiveFileLock::acquire(&layout.initialization_lock())?;
-    if marker_path.exists() {
+    if !secure_json_document(&marker_path)?.is_absent() {
         let winner = load_marker(layout)?;
         verify_filesystem_capabilities(layout.root())?;
         return Ok(winner);

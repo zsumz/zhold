@@ -93,6 +93,46 @@ fn durable_reserved_staging_is_recovered_and_promoted() -> Result<(), Box<dyn st
 }
 
 #[test]
+fn backup_only_staged_manifest_is_recovered_and_promoted() -> Result<(), Box<dyn std::error::Error>>
+{
+    let root = tempdir()?;
+    let project = tempdir()?;
+    let store = Store::open(root.path())?;
+    let context = context(project.path())?;
+    let initialization_id = Uuid::new_v4();
+    let record =
+        InitializationRecord::create(&store, context.arena_id().clone(), initialization_id);
+    let record_path = store.layout.initialization_record(initialization_id);
+    create_json(&record_path, &record)?;
+    fs::create_dir_all(record.staging_path().join("build"))?;
+    let now = unix_seconds()?;
+    let mut manifest = ArenaManifest::create(
+        store.marker.store_id,
+        &context,
+        Some(initialization_id),
+        now,
+    );
+    manifest.begin(
+        &context,
+        CommandDescriptor::default(),
+        ByteSize::from_bytes(4_096),
+        now,
+    );
+    let manifest_path = record.staging_path().join("arena.json");
+    create_json(&manifest_path, &manifest)?;
+    crate::io::json_recovery_test::rotate_to_backup(&manifest_path)?;
+    drop(store);
+
+    let reopened = Store::open_read_write(root.path())?;
+    let recovered: ArenaManifest = read_json(&reopened.layout.manifest(context.arena_id()))?;
+
+    assert_eq!(recovered.last_outcome, Some(BuildOutcome::NotStarted));
+    assert!(!record_path.exists());
+    assert!(!record.staging_path().exists());
+    Ok(())
+}
+
+#[test]
 fn completed_arena_with_a_leftover_journal_is_reconciled() -> Result<(), Box<dyn std::error::Error>>
 {
     let root = tempdir()?;

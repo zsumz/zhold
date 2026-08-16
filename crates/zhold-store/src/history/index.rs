@@ -1,5 +1,3 @@
-use std::fs;
-
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use zhold_core::ByteSize;
@@ -7,8 +5,11 @@ use zhold_core::ByteSize;
 use super::reader::read_receipts;
 use crate::{
     Store, StoreError,
-    io::{create_json, read_json, write_json},
+    io::{read_optional_json, upsert_json},
 };
+
+#[cfg(test)]
+use crate::io::read_json;
 
 const INDEX_SCHEMA_VERSION: u32 = 1;
 
@@ -93,9 +94,8 @@ pub(crate) fn read(store: &Store) -> Result<HistoryIndex, StoreError> {
 
 fn read_or_rebuild(store: &Store) -> Result<HistoryIndex, StoreError> {
     let path = store.layout.history_index();
-    match fs::symlink_metadata(&path) {
-        Ok(_) => {
-            let index: HistoryIndex = read_json(&path)?;
+    match read_optional_json::<HistoryIndex>(&path)? {
+        Some(index) => {
             if index.schema_version != INDEX_SCHEMA_VERSION
                 || index.store_id != store.marker.store_id
             {
@@ -110,8 +110,7 @@ fn read_or_rebuild(store: &Store) -> Result<HistoryIndex, StoreError> {
                 rebuild(store)
             }
         }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => rebuild(store),
-        Err(error) => Err(StoreError::io("inspect history index", path, error)),
+        None => rebuild(store),
     }
 }
 
@@ -133,12 +132,5 @@ fn rebuild(store: &Store) -> Result<HistoryIndex, StoreError> {
 }
 
 fn publish(store: &Store, index: &HistoryIndex) -> Result<(), StoreError> {
-    let path = store.layout.history_index();
-    if path.exists() {
-        write_json(&path, index)
-    } else if create_json(&path, index)? {
-        Ok(())
-    } else {
-        write_json(&path, index)
-    }
+    upsert_json(&store.layout.history_index(), index)
 }
