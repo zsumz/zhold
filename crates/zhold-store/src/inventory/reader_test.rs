@@ -170,3 +170,21 @@ fn a_known_zero_size_is_not_owned_uncertainty() -> Result<(), Box<dyn std::error
     );
     Ok(())
 }
+
+#[test]
+fn cached_inventory_ignores_abandoned_journal_staging() -> Result<(), Box<dyn std::error::Error>> {
+    let store_root = tempdir()?;
+    let store = Store::open(store_root.path())?;
+    let staging = store.layout.trash_index().join(format!(
+        "{}.json.{}.new",
+        uuid::Uuid::new_v4(),
+        uuid::Uuid::new_v4()
+    ));
+    fs::write(&staging, b"incomplete")?;
+
+    let inventory = store.inventory_cached()?;
+
+    assert!(inventory.findings.iter().all(|item| item.path != staging));
+    assert!(staging.is_file());
+    Ok(())
+}

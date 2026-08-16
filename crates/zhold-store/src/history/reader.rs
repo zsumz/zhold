@@ -7,7 +7,10 @@ use super::{
     HistoryFinding, HistoryPayload, HistoryPolicyDocument, HistoryQuery, HistoryReceipt,
     HistoryReport, HistorySummary,
 };
-use crate::{Store, StoreError, io::read_json};
+use crate::{
+    Store, StoreError,
+    io::{is_json_staging_path, read_json},
+};
 
 #[derive(Clone, Debug)]
 pub(crate) struct ValidatedReceipt {
@@ -129,6 +132,9 @@ pub(crate) fn read_receipts(
         let entry = entry
             .map_err(|error| StoreError::io("read history receipt entry", &directory, error))?;
         let path = entry.path();
+        if is_json_staging_path(&path) {
+            continue;
+        }
         match read_receipt(store, &path) {
             Ok(item) => valid.push(item),
             Err(error) => findings.push(HistoryFinding {

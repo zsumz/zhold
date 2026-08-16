@@ -89,6 +89,9 @@ fn cached_trash(store: &crate::Store) -> Result<(ByteSize, Vec<InventoryFinding>
         let path = entry
             .map_err(|error| StoreError::io("read retirement journal", &index, error))?
             .path();
+        if crate::io::is_json_staging_path(&path) {
+            continue;
+        }
         let result = read_json::<RetirementRecord>(&path).and_then(|record| {
             record.validate_journal(store, &path)?;
             if fs::symlink_metadata(record.trash_path()).is_ok() {

@@ -263,3 +263,21 @@ fn routine_publication_uses_the_clean_history_index() -> Result<(), Box<dyn std:
     assert_eq!(rebuilt.receipt_count(), 3);
     Ok(())
 }
+
+#[test]
+fn abandoned_json_staging_is_not_a_history_finding() -> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let store = Store::open(temporary.path().join("store"))?;
+    let staging = store.layout.history_receipts().join(format!(
+        "123-{}.json.{}.new",
+        uuid::Uuid::new_v4(),
+        uuid::Uuid::new_v4()
+    ));
+    fs::write(&staging, b"incomplete")?;
+
+    let report = store.history(&HistoryQuery::default())?;
+
+    assert!(report.findings.is_empty());
+    assert!(staging.is_file());
+    Ok(())
+}
