@@ -4,131 +4,87 @@
 
 <p align="center"><strong>Bounded Cargo build storage for parallel Git worktrees.</strong></p>
 
-zhold gives each physical Git worktree its own reusable Cargo intermediate
-directory, protects running builds with leases, and retires only complete
-storage it can prove it owns. It has no daemon, account, network service, API
-key, source upload, or LLM dependency.
+zhold manages Cargo intermediate files for repositories that use multiple Git
+worktrees. Each worktree keeps isolated, reusable build storage. zhold removes
+inactive storage to stay near one configured budget.
 
-This repository is `0.0.1`, the first public alpha. The format and command
-surface can still change before the first release candidate.
+`0.0.1` is a public alpha. Rust 1.91.1 or newer is required.
 
-## Start
+## Problem
 
-Install from crates.io with Rust 1.91.1 or newer:
+Sharing Cargo build intermediates across worktrees causes build-directory lock
+contention. Keeping them separate avoids that contention, but disk use grows
+with every worktree.
+
+zhold keeps the build directories separate and manages their lifecycle under
+one budget.
+
+Related Cargo issues:
+[#16804](https://github.com/rust-lang/cargo/issues/16804) and
+[#5026](https://github.com/rust-lang/cargo/issues/5026).
+
+## Install
 
 ```sh
 cargo install zhold --locked
 ```
 
-To install this repository checkout instead, run
-`cargo install --path crates/zhold-cli --locked`.
-
-Set one durable budget, then use Cargo normally through zhold:
+## Start
 
 ```sh
 zhold setup 200GiB
 zhold cargo test
 zhold
 zhold gc --dry-run
-zhold gc
 ```
 
-`zhold` by itself reads cached arena sizes, leases, reservations, and retirement
-journals without walking build trees. Use `zhold status --deep` or `zhold
-doctor` for recursive physical reconciliation. A one-off collection budget
-remains available as `zhold gc 100GiB --dry-run`.
+Use `zhold cargo ...` in place of `cargo ...` for managed builds. Running
+`zhold` shows the current store status.
 
-Useful core commands:
+Pass a one-time budget to collection when needed:
 
 ```sh
-zhold cargo test --workspace
-zhold pin 0123456789 --for 7d
-zhold unpin 0123456789
-zhold explain 0123456789
-zhold scan ../projects
-zhold doctor
+zhold gc 100GiB --dry-run
 ```
 
-If status reports a `suspect` arena after its sentinel died, first terminate or
-otherwise prove the orphaned Cargo process tree is gone, then acknowledge that
-fact explicitly with `zhold recover <arena> --terminated`.
+## Model
 
-## What zhold bounds
+- Cargo intermediates go into a zhold-owned build directory.
+- Builds with the same worktree, workspace, toolchain, compiler, and Cargo
+  configuration reuse the same directory.
+- zhold reserves space and may remove inactive directories before and after a
+  build.
+- Active, pinned, suspect, and uncertain directories are not removed.
+- Final artifacts remain in the workspace `target/` directory and are outside
+  the zhold budget.
 
-The default is a conservative steady-state arena budget, not an
-operating-system hard quota.
+## Budget
 
-Before Cargo starts, zhold serializes admission, counts every live build
-reservation, collects cold arenas, and checks an optional free-space floor.
-Reservations learn from the command class's historical p95 and previous
-observed growth.
-After the complete Cargo process tree exits, zhold finalizes the arena, releases
-its lease, and collects again.
-
-A running build can exceed its estimate. Configure the emergency floor when the
-store shares a filesystem with important data:
+The budget is a steady-state limit, not a hard quota. A running build can exceed
+its reservation. A minimum free-space floor can stop a new managed build before
+it starts:
 
 ```sh
 zhold setup 200GiB --min-free 25GiB --build-reserve 2GiB
 ```
 
-Only a successfully adopted OS quota is a hard physical boundary. Quota
-inspection and adoption are experimental and never provision or elevate:
+## Safety
+
+zhold removes only complete build directories that it created and can validate.
+It checks ownership, metadata, leases, pins, and worktree state before removal.
+Unknown state stops collection.
+
+See the [safety and threat model](docs/safety.md) for the exact guarantees.
+
+## Development
 
 ```sh
-cargo install --path crates/zhold-cli --locked --features experimental
-zhold quota status
-zhold quota plan 220GiB
-zhold quota adopt 220GiB
-```
-
-The same feature exposes advanced history administration and worktree-manager
-hooks. They remain outside the default alpha command surface.
-
-## Cargo and worktrees
-
-Arena identity includes repository, physical worktree, Cargo workspace,
-toolchain, configured compiler, and relevant Cargo configuration. Multiple Cargo
-workspaces in one Git worktree remain distinct. `--manifest-path`, nightly `-C`,
-and `--config` participate in effective invocation discovery.
-
-zhold appends its managed `build.build-dir` at Cargo's final command-line
-configuration precedence. Cargo's final artifacts remain in the workspace
-target directory; zhold owns only the separate intermediate directory supported
-by Cargo 1.91.
-
-## Safety boundary
-
-- Active and pinned arenas are never collection candidates.
-- Admission fails closed on unknown owned bytes or reservations.
-- Collection rereads identity, revision, pin, lease, and worktree state.
-- Retirement atomically renames a whole arena into owned trash before deletion.
-- Raw Cargo arguments are never persisted.
-- Unix store state is owner-only (`0700` directories, `0600` files).
-- Exit zero means Cargo and zhold lifecycle finalization both succeeded.
-
-zhold protects against crashes, ordinary concurrency, cancellation, malformed
-state, symlinks, and accidental replacement. It does not claim resistance to a
-malicious same-user process actively racing path-based deletion. See
-[Safety and threat model](docs/safety.md) for the exact boundary.
-
-## Reference
-
-- [Design and guarantees](docs/design.md)
-- [Safety and threat model](docs/safety.md)
-- [Store format and migration](docs/store-format.md)
-- [Locking and concurrency](docs/locking.md)
-- [Platform support](docs/platform-support.md)
-- [Release qualification](docs/release-qualification.md)
-
-Run the complete local gate with:
-
-```sh
+cargo install --path crates/zhold-cli --locked
 ./scripts/check
 ```
 
-It enforces architecture capabilities, formatting, locked warnings-as-errors
-Clippy, all tests, the default command surface, rustdoc, and a clean worktree.
+See [design](docs/design.md), [locking](docs/locking.md), and
+[platform support](docs/platform-support.md) for implementation details.
 
 ## License
 
