@@ -9,8 +9,8 @@ directory, protects running builds with leases, and retires only complete
 storage it can prove it owns. It has no daemon, account, network service, API
 key, source upload, or LLM dependency.
 
-This repository is `0.1.0-alpha.1`. The format and command surface can still
-change before the first release candidate.
+This repository is `0.0.1`, the first public alpha. The format and command
+surface can still change before the first release candidate.
 
 ## Start
 

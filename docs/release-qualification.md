@@ -42,6 +42,5 @@ repeated dry-run and real GC, and machine restart with active or staged state.
 Review the resulting physical footprint, pending trash, reservation accuracy,
 false admission refusals, cancellation latency, and every ownership finding.
 
-The first public build should be `0.1.0-alpha.1`. Promotion to RC requires the
-cross-platform gates and the real multi-worktree soak, not merely passing unit
-tests.
+The first public build is `0.0.1`. Promotion to RC requires the cross-platform
+gates and the real multi-worktree soak, not merely passing unit tests.

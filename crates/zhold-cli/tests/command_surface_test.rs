@@ -18,7 +18,7 @@ fn help_and_version_are_successful_standard_output() -> Result<(), Box<dyn std::
 
     let version = zhold(&store, temporary.path(), &["--version"])?;
     assert!(version.status.success());
-    assert_eq!(String::from_utf8(version.stdout)?, "zhold 0.1.0-alpha.1\n");
+    assert_eq!(String::from_utf8(version.stdout)?, "zhold 0.0.1\n");
     assert!(version.stderr.is_empty());
     Ok(())
 }
