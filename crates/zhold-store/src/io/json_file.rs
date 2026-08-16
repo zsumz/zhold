@@ -223,3 +223,16 @@ pub(super) fn backup_path(path: &Path) -> PathBuf {
 pub(super) fn temporary_path(path: &Path) -> PathBuf {
     path.with_extension(format!("json.{}.new", uuid::Uuid::new_v4()))
 }
+
+pub(crate) fn is_json_staging_path(path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    let Some(stem) = name.strip_suffix(".new") else {
+        return false;
+    };
+    let Some((primary, nonce)) = stem.rsplit_once(".json.") else {
+        return false;
+    };
+    !primary.is_empty() && uuid::Uuid::parse_str(nonce).is_ok()
+}

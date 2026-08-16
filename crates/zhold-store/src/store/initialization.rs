@@ -194,6 +194,7 @@ pub(super) fn ensure_layout(layout: &StoreLayout) -> Result<(), StoreError> {
         layout.locks().join("metadata"),
         layout.trash(),
         layout.trash_index(),
+        layout.initialization_index(),
         layout.history(),
         layout.history_receipts(),
         layout.integrations(),
@@ -203,27 +204,6 @@ pub(super) fn ensure_layout(layout: &StoreLayout) -> Result<(), StoreError> {
         ensure_managed_directory(layout.root(), &directory)?;
     }
     Ok(())
-}
-
-pub(super) fn prepare_arena_root(layout: &StoreLayout, arena: &Path) -> Result<bool, StoreError> {
-    let prefix = arena.parent().ok_or_else(|| StoreError::InvalidOwnership {
-        path: arena.to_path_buf(),
-        reason: "arena path has no prefix directory".to_owned(),
-    })?;
-    ensure_managed_directory(layout.root(), prefix)?;
-    match fs::symlink_metadata(arena) {
-        Ok(_) => {
-            ensure_managed_directory(layout.root(), arena)?;
-            Ok(false)
-        }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            fs::create_dir(arena)
-                .map_err(|source| StoreError::io("create managed arena", arena, source))?;
-            ensure_managed_directory(layout.root(), arena)?;
-            Ok(true)
-        }
-        Err(error) => Err(StoreError::io("inspect managed arena", arena, error)),
-    }
 }
 
 pub(super) fn ensure_managed_directory(root: &Path, path: &Path) -> Result<(), StoreError> {

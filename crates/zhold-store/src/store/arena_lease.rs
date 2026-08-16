@@ -65,6 +65,11 @@ impl ArenaLease {
         self.pending_history.push(draft);
     }
 
+    pub(crate) fn promote_paths(&mut self, arena_root: PathBuf, build_dir: PathBuf) {
+        self.arena_root = arena_root;
+        self.build_dir = build_dir;
+    }
+
     /// Stable arena identity.
     pub fn arena_id(&self) -> &ArenaId {
         &self.arena_id
@@ -167,6 +172,7 @@ impl ArenaLease {
             .and_then(|admission| admission.integration.as_ref());
         let primary = self.store.finish_primary(
             &self.arena_id,
+            &self.arena_root,
             outcome,
             high_water_observation,
             self.initial_bytes,
@@ -259,6 +265,7 @@ impl Drop for ArenaLease {
             .and_then(|admission| admission.integration.as_ref());
         let build = self.store.finish_primary(
             &self.arena_id,
+            &self.arena_root,
             outcome,
             ByteSize::ZERO,
             self.initial_bytes,

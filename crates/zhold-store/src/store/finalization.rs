@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use zhold_core::{ArenaId, BuildOutcome, ByteSize, CargoCommandClass};
 
 use crate::{
@@ -22,6 +24,7 @@ impl Store {
     pub(crate) fn finish_primary(
         &self,
         id: &ArenaId,
+        arena_root: &Path,
         outcome: BuildOutcome,
         high_water_observation: ByteSize,
         initial_bytes: ByteSize,
@@ -30,7 +33,7 @@ impl Store {
         integration: Option<&crate::WorktreeIntegration>,
     ) -> Result<PrimaryFinalization, StoreError> {
         let _metadata_lock = ExclusiveFileLock::acquire(&self.layout.metadata_lock(id))?;
-        let manifest_path = self.layout.manifest(id);
+        let manifest_path = arena_root.join("arena.json");
         let mut manifest: ArenaManifest = read_json(&manifest_path)?;
         manifest.validate(self.marker.store_id, id, manifest_path.clone())?;
         let finished_seconds = unix_seconds()?;

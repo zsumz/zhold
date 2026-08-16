@@ -1,5 +1,6 @@
 //! Marked store capability and leased arena lifecycle.
 
+mod admission;
 mod arena_lease;
 mod collection;
 mod config;

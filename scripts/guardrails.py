@@ -206,9 +206,13 @@ def check_capability_boundaries(checks: Checks) -> None:
     allowed_tree_callers = {
         "crates/zhold-store/src/io/tree.rs",
         "crates/zhold-store/src/collection/collector.rs",
+        "crates/zhold-store/src/collection/initialization.rs",
         "crates/zhold-store/src/collection/trash.rs",
     }
-    allowed_renamers = allowed_tree_callers | {"crates/zhold-store/src/io/json_publish.rs"}
+    allowed_renamers = allowed_tree_callers | {
+        "crates/zhold-store/src/io/json_publish.rs",
+        "crates/zhold-store/src/store/admission.rs",
+    }
     for path in production_rust_files(store):
         text = code(path)
         name = relative(path)

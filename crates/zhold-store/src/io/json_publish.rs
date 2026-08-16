@@ -118,7 +118,7 @@ pub(super) fn replace_with_backup_with(
 }
 
 #[cfg(unix)]
-pub(super) fn sync_metadata_directory(path: &Path) -> Result<(), StoreError> {
+pub(crate) fn sync_metadata_directory(path: &Path) -> Result<(), StoreError> {
     let parent = metadata_parent(path)?;
     let directory = fs::File::open(parent)
         .map_err(|error| StoreError::io("open metadata directory for sync", parent, error))?;
@@ -129,6 +129,6 @@ pub(super) fn sync_metadata_directory(path: &Path) -> Result<(), StoreError> {
 
 #[cfg(not(unix))]
 #[allow(clippy::unnecessary_wraps)]
-pub(super) fn sync_metadata_directory(_path: &Path) -> Result<(), StoreError> {
+pub(crate) fn sync_metadata_directory(_path: &Path) -> Result<(), StoreError> {
     Ok(())
 }

@@ -1,6 +1,7 @@
 //! Deterministic whole-arena collection.
 
 mod collector;
+mod initialization;
 mod reconcile;
 mod report;
 mod trash;
@@ -8,11 +9,14 @@ mod trash;
 #[cfg(test)]
 mod collector_test;
 #[cfg(test)]
+mod initialization_test;
+#[cfg(test)]
 mod reconcile_test;
 #[cfg(test)]
 mod trash_test;
 
 pub(crate) use collector::{collect, collect_locked};
+pub(crate) use initialization::{reconcile_initializations, reconcile_initializations_locked};
 pub use report::{
     CollectionReport, CollectionSkip, Retirement, RetirementDisposition, TrashEntry, TrashOutcome,
     TrashReport,

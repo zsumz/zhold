@@ -38,10 +38,12 @@ impl Store {
         let marker = open_marker_read_write(&layout)?;
         verify_filesystem_capabilities(layout.root())?;
         ensure_layout(&layout)?;
-        Ok(Self {
+        let store = Self {
             layout,
             marker,
             read_only: false,
-        })
+        };
+        crate::collection::reconcile_initializations(&store)?;
+        Ok(store)
     }
 }

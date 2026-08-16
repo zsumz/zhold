@@ -49,6 +49,10 @@ impl StoreLayout {
         self.root.join("trash-index")
     }
 
+    pub(crate) fn initialization_index(&self) -> PathBuf {
+        self.root.join("initialization-index")
+    }
+
     pub(crate) fn history(&self) -> PathBuf {
         self.root.join("history")
     }
@@ -124,6 +128,17 @@ impl StoreLayout {
 
     pub(crate) fn manifest(&self, id: &ArenaId) -> PathBuf {
         self.arena(id).join("arena.json")
+    }
+
+    pub(crate) fn arena_staging(&self, id: &ArenaId, initialization_id: Uuid) -> PathBuf {
+        self.arenas()
+            .join(prefix(id))
+            .join(format!(".init-{id}-{initialization_id}"))
+    }
+
+    pub(crate) fn initialization_record(&self, initialization_id: Uuid) -> PathBuf {
+        self.initialization_index()
+            .join(format!("{initialization_id}.json"))
     }
 
     pub(crate) fn arena_lock(&self, id: &ArenaId) -> PathBuf {

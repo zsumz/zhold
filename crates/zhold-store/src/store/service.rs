@@ -12,13 +12,12 @@ use crate::{
     collection::collect_locked,
     history::{CollectionReceiptSource, HistoryDraft},
     inventory::{ArenaMeasurement, read_arena_snapshot, read_inventory},
-    io::{create_json, read_json, write_json},
+    io::{read_json, write_json},
     layout::StoreLayout,
     lock::ExclusiveFileLock,
     manifest::{ArenaManifest, StoreMarker},
     scan::scan,
-    store::initialization::{ensure_managed_directory, prepare_arena_root},
-    time::{unix_milliseconds, unix_seconds},
+    time::unix_seconds,
     worktree::acquire_admission,
 };
 
@@ -148,60 +147,6 @@ impl Store {
             CollectionReceiptSource::Preflight,
         ));
         Ok((lease, report))
-    }
-
-    fn lease_reserved_locked(
-        &self,
-        context: &BuildContext,
-        invocation: &CargoInvocation,
-        reservation: ByteSize,
-        admission: (ExclusiveFileLock, crate::worktree::WorktreeAdmission),
-    ) -> Result<ArenaLease, StoreError> {
-        let (arena_lock, worktree) = admission;
-        let id = context.arena_id();
-        let arena = self.layout.arena(id);
-        let build_dir = self.layout.build_dir(id);
-        let created = prepare_arena_root(&self.layout, &arena)?;
-        ensure_managed_directory(self.layout.root(), &build_dir)?;
-        let _metadata_lock = ExclusiveFileLock::acquire(&self.layout.metadata_lock(id))?;
-        let manifest_path = self.layout.manifest(id);
-        let command = invocation.descriptor(self.marker.fingerprint_key());
-        let now = unix_seconds()?;
-        let mut manifest = if created {
-            ArenaManifest::create(self.marker.store_id, context, now)
-        } else {
-            let manifest: ArenaManifest = read_json(&manifest_path)?;
-            manifest.validate(self.marker.store_id, id, manifest_path.clone())?;
-            manifest.validate_context(context, manifest_path.clone())?;
-            manifest
-        };
-        if manifest.is_unfinished() {
-            return Err(StoreError::ArenaSuspect(id.to_string()));
-        }
-        manifest.begin(context, command, reservation, now);
-        if created {
-            if !create_json(&manifest_path, &manifest)? {
-                return Err(StoreError::InvalidOwnership {
-                    path: manifest_path,
-                    reason: "new arena manifest appeared during initialization".to_owned(),
-                });
-            }
-        } else {
-            write_json(&manifest_path, &manifest)?;
-        }
-        let initial_bytes = crate::io::measure_tree(&arena)?;
-        manifest.observe_size(initial_bytes);
-        write_json(&manifest_path, &manifest)?;
-        Ok(ArenaLease::new(
-            self.clone(),
-            context.arena_id().clone(),
-            arena,
-            build_dir,
-            arena_lock,
-            worktree,
-            initial_bytes,
-            unix_milliseconds()?,
-        ))
     }
 
     fn admission_locks(

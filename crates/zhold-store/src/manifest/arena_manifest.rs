@@ -10,7 +10,7 @@ use zhold_core::{
 use super::ArenaLifecycleStage;
 use crate::{BuildContext, StoreError};
 
-pub(crate) const ARENA_SCHEMA_VERSION: u32 = 7;
+pub(crate) const ARENA_SCHEMA_VERSION: u32 = 8;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub(crate) struct ArenaManifest {
@@ -34,6 +34,8 @@ pub(crate) struct ArenaManifest {
     pub(crate) last_started_at: Option<u64>,
     pub(crate) last_finished_at: Option<u64>,
     #[serde(default)]
+    pub(crate) initialization_id: Option<Uuid>,
+    #[serde(default)]
     pub(crate) lifecycle_stage: Option<ArenaLifecycleStage>,
     #[serde(default)]
     pub(crate) command: CommandDescriptor,
@@ -52,7 +54,12 @@ pub(crate) struct ArenaManifest {
 }
 
 impl ArenaManifest {
-    pub(crate) fn create(store_id: Uuid, context: &BuildContext, now: u64) -> Self {
+    pub(crate) fn create(
+        store_id: Uuid,
+        context: &BuildContext,
+        initialization_id: Option<Uuid>,
+        now: u64,
+    ) -> Self {
         Self {
             schema_version: ARENA_SCHEMA_VERSION,
             store_id,
@@ -73,6 +80,7 @@ impl ArenaManifest {
             last_used_at: now,
             last_started_at: None,
             last_finished_at: None,
+            initialization_id,
             lifecycle_stage: Some(ArenaLifecycleStage::Finalized),
             command: CommandDescriptor::default(),
             last_outcome: None,
@@ -156,6 +164,21 @@ impl ArenaManifest {
             Err(StoreError::InvalidOwnership {
                 path,
                 reason: "persisted arena context does not match the resolved build".to_owned(),
+            })
+        }
+    }
+
+    pub(crate) fn validate_initialization(
+        &self,
+        initialization_id: Uuid,
+        path: PathBuf,
+    ) -> Result<(), StoreError> {
+        if self.initialization_id == Some(initialization_id) {
+            Ok(())
+        } else {
+            Err(StoreError::InvalidOwnership {
+                path,
+                reason: "arena manifest does not match its initialization journal".to_owned(),
             })
         }
     }
