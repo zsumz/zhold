@@ -13,6 +13,7 @@ use crate::{
 impl Store {
     /// Marks a suspect build terminated after the caller confirms its process tree is gone.
     pub fn recover_suspect(&self, id: &ArenaId) -> Result<HistoryWrite, StoreError> {
+        self.ensure_writable("recover a suspect arena")?;
         let collection = ExclusiveFileLock::acquire(&self.layout.collection_lock())?;
         let Some(arena_lock) = ExclusiveFileLock::try_acquire(&self.layout.arena_lock(id))? else {
             return Err(StoreError::ArenaActive(id.to_string()));

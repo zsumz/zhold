@@ -24,12 +24,16 @@ struct ConfigDocument {
 impl Store {
     /// Reads durable store defaults without applying environment overrides.
     pub fn config(&self) -> Result<StoreConfig, StoreError> {
+        if self.read_only {
+            return read_config(self);
+        }
         let _lock = ExclusiveFileLock::acquire(&self.layout.config_lock())?;
         read_config(self)
     }
 
     /// Atomically replaces durable store defaults.
     pub fn set_config(&self, config: StoreConfig) -> Result<(), StoreError> {
+        self.ensure_writable("replace store configuration")?;
         validate_config(config)?;
         let _lock = ExclusiveFileLock::acquire(&self.layout.config_lock())?;
         persist_config(self, config)
@@ -37,6 +41,7 @@ impl Store {
 
     /// Patches only explicitly supplied durable defaults and preserves all others.
     pub fn patch_config(&self, patch: StoreConfig) -> Result<StoreConfig, StoreError> {
+        self.ensure_writable("patch store configuration")?;
         let _lock = ExclusiveFileLock::acquire(&self.layout.config_lock())?;
         let current = read_config(self)?;
         let merged = StoreConfig {

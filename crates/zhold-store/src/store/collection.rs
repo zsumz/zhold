@@ -14,6 +14,9 @@ impl Store {
         policy: CollectionPolicy,
         dry_run: bool,
     ) -> Result<CollectionReport, StoreError> {
+        if !dry_run {
+            self.ensure_writable("collect managed arenas")?;
+        }
         let mut report = collect(self, policy, dry_run, ArenaMeasurement::Deep)?;
         if !dry_run {
             report.history = persist(
@@ -29,6 +32,7 @@ impl Store {
         &self,
         policy: CollectionPolicy,
     ) -> Result<CollectionReport, StoreError> {
+        self.ensure_writable("run post-build collection")?;
         let mut report = collect(self, policy, false, ArenaMeasurement::Cached)?;
         report.history = persist(
             self,
@@ -39,6 +43,9 @@ impl Store {
 
     /// Retries deletion of already-retired, validated owned trash entries.
     pub fn retry_trash(&self, dry_run: bool) -> Result<TrashReport, StoreError> {
+        if !dry_run {
+            self.ensure_writable("retry retired arena deletion")?;
+        }
         let mut report = retry_trash(self, dry_run)?;
         if !dry_run {
             report.history = persist(self, HistoryDraft::trash(&report));

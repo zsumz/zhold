@@ -39,6 +39,14 @@ pub struct StoreInfo {
 }
 
 impl Store {
+    pub(crate) fn ensure_writable(&self, operation: &'static str) -> Result<(), StoreError> {
+        if self.read_only {
+            Err(StoreError::ReadOnly { operation })
+        } else {
+            Ok(())
+        }
+    }
+
     pub(crate) fn probe_lock(
         &self,
         path: &std::path::Path,
@@ -114,6 +122,7 @@ impl Store {
         invocation: &CargoInvocation,
         reservation: ByteSize,
     ) -> Result<ArenaLease, StoreError> {
+        self.ensure_writable("acquire an arena lease")?;
         let id = context.arena_id();
         let worktree = acquire_admission(self, context)?;
         let (_collection_lock, arena_lock) = self.admission_locks(id)?;
@@ -135,6 +144,7 @@ impl Store {
         reservation: ByteSize,
         policy: CollectionPolicy,
     ) -> Result<(ArenaLease, CollectionReport), StoreError> {
+        self.ensure_writable("acquire an arena lease and collect")?;
         let id = context.arena_id();
         let worktree = acquire_admission(self, context)?;
         let (_collection_lock, arena_lock) = self.admission_locks(id)?;
@@ -204,6 +214,7 @@ impl Store {
         pinned: bool,
         expires_at: Option<u64>,
     ) -> Result<(), StoreError> {
+        self.ensure_writable("update an arena pin")?;
         let arena = self.layout.arena(id);
         if !arena.exists() {
             return Err(StoreError::ArenaNotFound(id.to_string()));

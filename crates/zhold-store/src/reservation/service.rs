@@ -16,6 +16,10 @@ impl Store {
         invocation: &CargoInvocation,
         configured_minimum: ByteSize,
     ) -> Result<ByteSize, StoreError> {
+        if self.read_only {
+            return read_profile(self)
+                .map(|profile| profile.recommend(invocation.command_class(), configured_minimum));
+        }
         let _lock = ExclusiveFileLock::acquire(&self.layout.reservation_lock())?;
         let profile = read_profile(self)?;
         Ok(profile.recommend(invocation.command_class(), configured_minimum))
@@ -26,6 +30,7 @@ impl Store {
         command_class: CargoCommandClass,
         growth: ByteSize,
     ) -> Result<(), StoreError> {
+        self.ensure_writable("record reservation growth")?;
         let _lock = ExclusiveFileLock::acquire(&self.layout.reservation_lock())?;
         let mut profile = read_profile(self)?;
         profile.record(command_class, growth);

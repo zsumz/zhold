@@ -1,9 +1,11 @@
 use std::{io, sync::mpsc, thread, time::Duration};
 
 use tempfile::tempdir;
-use zhold_core::BuildOutcome;
+use zhold_core::{BuildOutcome, ByteSize, CollectionPolicy, HistoryPolicy};
 
-use crate::{Store, lock::ExclusiveFileLock, test_support};
+use crate::{
+    HistoryPruneRequest, Store, StoreConfig, StoreError, lock::ExclusiveFileLock, test_support,
+};
 
 #[test]
 fn read_only_open_does_not_create_or_repair_store_state() -> Result<(), Box<dyn std::error::Error>>
@@ -44,6 +46,40 @@ fn read_only_inventory_never_creates_a_missing_lock_file() -> Result<(), Box<dyn
     assert_eq!(store.inventory_cached()?.arenas.len(), 1);
     assert!(!lock.exists());
     Ok(())
+}
+
+#[test]
+fn every_stable_mutator_rejects_a_read_only_handle_first() -> Result<(), Box<dyn std::error::Error>>
+{
+    let store_root = tempdir()?;
+    let project = tempdir()?;
+    let writable = Store::open_read_write(store_root.path())?;
+    let (context, _) = test_support::create_idle_arena(&writable, project.path(), 4_096)?;
+    let invocation = test_support::invocation(project.path())?;
+    drop(writable);
+    let store = Store::open_read_only(store_root.path())?;
+    let policy = CollectionPolicy::new(ByteSize::from_bytes(1));
+
+    assert_read_only(&store.lease(&context, &invocation));
+    assert_read_only(&store.set_config(StoreConfig::default()));
+    assert_read_only(&store.patch_config(StoreConfig::default()));
+    assert_read_only(&store.set_pinned(context.arena_id(), true));
+    assert_read_only(&store.collect(policy, false));
+    assert_read_only(&store.collect_post_build(policy));
+    assert_read_only(&store.retry_trash(false));
+    assert_read_only(&store.recover_suspect(context.arena_id()));
+    assert_read_only(&store.set_history_policy(HistoryPolicy::default()));
+    assert_read_only(&store.prune_history(HistoryPruneRequest {
+        keep: None,
+        max_bytes: None,
+        older_than: None,
+        dry_run: false,
+    }));
+    Ok(())
+}
+
+fn assert_read_only<T>(result: &Result<T, StoreError>) {
+    assert!(matches!(result, Err(StoreError::ReadOnly { .. })));
 }
 
 #[test]

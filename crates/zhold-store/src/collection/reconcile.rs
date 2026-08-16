@@ -10,8 +10,8 @@ use super::{TrashEntry, TrashOutcome};
 use crate::{
     Store, StoreError,
     inventory::ensure_real_contained_directory,
-    io::{measure_tree, read_json, remove_json, write_json},
-    lock::ExclusiveFileLock,
+    io::{is_json_staging_path, measure_tree, read_json, remove_json, write_json},
+    lock::{ExclusiveFileLock, LockState},
     manifest::{ArenaManifest, RetirementRecord},
 };
 
@@ -23,6 +23,9 @@ pub(super) struct Reconciliation {
 }
 
 pub(super) fn reconcile_locked(store: &Store, dry_run: bool) -> Result<Reconciliation, StoreError> {
+    if !dry_run {
+        store.ensure_writable("reconcile interrupted retirements")?;
+    }
     let root = canonical_root(store)?;
     ensure_real_contained_directory(&store.layout.trash(), &root)?;
     ensure_real_contained_directory(&store.layout.trash_index(), &root)?;
@@ -33,6 +36,9 @@ pub(super) fn reconcile_locked(store: &Store, dry_run: bool) -> Result<Reconcili
     let mut reclaimed = ByteSize::ZERO;
 
     for record_path in entry_paths(&store.layout.trash_index())? {
+        if is_json_staging_path(&record_path) {
+            continue;
+        }
         let attempt = read_json::<RetirementRecord>(&record_path).and_then(|record| {
             record.validate_journal(store, &record_path)?;
             owned_trash.insert(record.trash_path().to_path_buf());
@@ -142,6 +148,19 @@ fn repair_orphaned_intents(
             continue;
         }
         let arena_id = manifest.arena_id.clone();
+        if dry_run {
+            if store.probe_lock(&store.layout.arena_lock(&arena_id))? == LockState::Held {
+                continue;
+            }
+            let mut current: ArenaManifest = read_json(&manifest_path)?;
+            current.validate(store.marker.store_id, &arena_id, manifest_path.clone())?;
+            ensure_real_contained_directory(&store.layout.arena(&arena_id), root)?;
+            if current.clear_retirement(retirement_id) {
+                repaired.push(repair_entry(&manifest_path, true));
+            }
+            continue;
+        }
+        store.ensure_writable("repair an interrupted retirement")?;
         let Some(_arena) = ExclusiveFileLock::try_acquire(&store.layout.arena_lock(&arena_id))?
         else {
             continue;
@@ -153,10 +172,8 @@ fn repair_orphaned_intents(
         if !current.clear_retirement(retirement_id) {
             continue;
         }
-        if !dry_run {
-            write_json(&manifest_path, &current)?;
-        }
-        repaired.push(repair_entry(&manifest_path, dry_run));
+        write_json(&manifest_path, &current)?;
+        repaired.push(repair_entry(&manifest_path, false));
     }
     Ok(repaired)
 }

@@ -21,6 +21,7 @@ impl Store {
         &self,
         policy: HistoryPolicy,
     ) -> Result<HistoryPruneReport, StoreError> {
+        self.ensure_writable("set history policy")?;
         history::set_policy(self, policy)?;
         history::prune(
             self,
@@ -38,6 +39,9 @@ impl Store {
         &self,
         request: HistoryPruneRequest,
     ) -> Result<HistoryPruneReport, StoreError> {
+        if !request.dry_run {
+            self.ensure_writable("prune history")?;
+        }
         history::prune(self, request)
     }
 

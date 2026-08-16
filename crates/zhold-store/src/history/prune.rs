@@ -13,6 +13,10 @@ pub(crate) fn prune(
     store: &Store,
     request: HistoryPruneRequest,
 ) -> Result<HistoryPruneReport, StoreError> {
+    if request.dry_run {
+        return prune_locked(store, request);
+    }
+    store.ensure_writable("prune history")?;
     let _lock = ExclusiveFileLock::acquire(&store.layout.history_lock())?;
     prune_locked(store, request)
 }

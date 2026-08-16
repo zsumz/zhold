@@ -18,6 +18,10 @@ pub(crate) fn collect(
     dry_run: bool,
     measurement: ArenaMeasurement,
 ) -> Result<CollectionReport, StoreError> {
+    if dry_run {
+        return collect_locked(store, policy, true, measurement);
+    }
+    store.ensure_writable("collect managed arenas")?;
     let _collection_lock = ExclusiveFileLock::acquire(&store.layout.collection_lock())?;
     collect_locked(store, policy, dry_run, measurement)
 }
@@ -29,6 +33,7 @@ pub(crate) fn collect_locked(
     measurement: ArenaMeasurement,
 ) -> Result<CollectionReport, StoreError> {
     if !dry_run {
+        store.ensure_writable("collect managed arenas")?;
         let _reconciliation = super::reconcile::reconcile_locked(store, false)?;
     }
     let inventory = read_arena_snapshot(store, measurement)?;
@@ -155,6 +160,7 @@ pub(super) fn retire(
     eviction: &zhold_core::Eviction,
     expected_revision: u64,
 ) -> Result<RetirementAttempt, StoreError> {
+    store.ensure_writable("retire a managed arena")?;
     let Some(_arena_lock) =
         ExclusiveFileLock::try_acquire(&store.layout.arena_lock(&eviction.arena_id))?
     else {

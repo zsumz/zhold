@@ -45,6 +45,12 @@ pub enum StoreError {
         /// Underlying synchronization or injected fault.
         reason: String,
     },
+    /// A mutating operation was attempted through a read-only store handle.
+    #[error("read-only store cannot {operation}")]
+    ReadOnly {
+        /// Operation rejected before any filesystem mutation.
+        operation: &'static str,
+    },
     /// A non-empty directory did not contain a valid zhold store marker.
     #[error("refusing to claim non-empty unmarked store root `{0}`")]
     UnmarkedStore(PathBuf),

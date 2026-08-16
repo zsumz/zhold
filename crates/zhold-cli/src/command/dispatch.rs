@@ -1,4 +1,4 @@
-use zhold_store::Store;
+use zhold_store::{Store, StoreConfig};
 
 use crate::{
     CliError,
@@ -31,7 +31,7 @@ pub(crate) fn execute(cli: Cli) -> Result<ExitStatus, CliError> {
     {
         return super::setup::execute(&store, *budget, *min_free, *build_reserve, cli.format);
     }
-    let config = store.config()?;
+    let config = effective_config(&store, &command)?;
     let budget = cli.budget.or(config.arena_budget);
     let gc_budget = match &command {
         Command::Gc {
@@ -107,9 +107,57 @@ pub(crate) fn execute(cli: Cli) -> Result<ExitStatus, CliError> {
 }
 
 fn open_store(root: &std::path::Path, command: &Command) -> Result<Store, CliError> {
-    if root.exists() && matches!(command, Command::Status { .. } | Command::Doctor) {
+    if command_is_read_only(command) {
         Ok(Store::open_read_only(root)?)
     } else {
         Ok(Store::open_read_write(root)?)
+    }
+}
+
+fn command_needs_config(command: &Command) -> bool {
+    match command {
+        Command::Cargo { .. } | Command::Gc { .. } => true,
+        #[cfg(feature = "experimental")]
+        Command::Quota {
+            action: crate::app::QuotaCommand::Adopt { .. },
+        } => true,
+        _ => false,
+    }
+}
+
+fn effective_config(store: &Store, command: &Command) -> Result<StoreConfig, CliError> {
+    if command_needs_config(command) {
+        Ok(store.config()?)
+    } else {
+        Ok(StoreConfig::default())
+    }
+}
+
+fn command_is_read_only(command: &Command) -> bool {
+    match command {
+        Command::Scan { .. }
+        | Command::Status { .. }
+        | Command::Doctor
+        | Command::Explain { .. }
+        | Command::Gc { dry_run: true, .. } => true,
+        #[cfg(feature = "experimental")]
+        Command::History { action: None, .. }
+        | Command::History {
+            action: Some(crate::app::HistoryCommand::Prune { dry_run: true, .. }),
+            ..
+        }
+        | Command::History {
+            action:
+                Some(crate::app::HistoryCommand::Policy {
+                    enabled: None,
+                    max_receipts: None,
+                    max_bytes: None,
+                }),
+            ..
+        }
+        | Command::Quota {
+            action: crate::app::QuotaCommand::Status | crate::app::QuotaCommand::Plan { .. },
+        } => true,
+        _ => false,
     }
 }

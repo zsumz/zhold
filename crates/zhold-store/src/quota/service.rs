@@ -34,6 +34,7 @@ impl Store {
         provider: QuotaProvider,
         budget: Option<ByteSize>,
     ) -> Result<QuotaAdoption, StoreError> {
+        self.ensure_writable("adopt a quota expectation")?;
         let result = {
             let _lock = ExclusiveFileLock::acquire(&self.layout.quota_lock())?;
             adopt_locked(self, hard_limit, provider, budget, &SystemQuotaProbe)?
@@ -43,6 +44,7 @@ impl Store {
 
     /// Removes only zhold's expectation and never changes operating-system enforcement.
     pub fn quota_unadopt(&self) -> Result<QuotaAdoption, StoreError> {
+        self.ensure_writable("remove a quota expectation")?;
         let previous = {
             let _lock = ExclusiveFileLock::acquire(&self.layout.quota_lock())?;
             let previous = read_expectation(self)?;

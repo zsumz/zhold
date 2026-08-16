@@ -19,6 +19,7 @@ impl Store {
         id: &ArenaId,
         transition: LifecycleTransition,
     ) -> Result<(), StoreError> {
+        self.ensure_writable("transition arena lifecycle")?;
         let _metadata = ExclusiveFileLock::acquire(&self.layout.metadata_lock(id))?;
         let path = self.layout.manifest(id);
         let mut manifest: ArenaManifest = read_json(&path)?;

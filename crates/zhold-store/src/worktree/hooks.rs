@@ -16,6 +16,7 @@ impl Store {
         context: &WorktreeContext,
         metadata: HookMetadata,
     ) -> Result<HookReport, StoreError> {
+        self.ensure_writable("register a worktree")?;
         transitions::validate_metadata(&metadata)?;
         registry::validate_context(context)?;
         let mut report = {
@@ -34,6 +35,7 @@ impl Store {
         path: &Path,
         manager: Option<String>,
     ) -> Result<HookReport, StoreError> {
+        self.ensure_writable("prepare worktree removal")?;
         transitions::validate_value("manager", manager.as_deref())?;
         let mut report = {
             let _registry = ExclusiveFileLock::acquire(&self.layout.worktree_registry_lock())?;
@@ -62,6 +64,7 @@ impl Store {
         path: &Path,
         manager: Option<String>,
     ) -> Result<HookReport, StoreError> {
+        self.ensure_writable("record worktree removal")?;
         transitions::validate_value("manager", manager.as_deref())?;
         let mut report = {
             let _registry = ExclusiveFileLock::acquire(&self.layout.worktree_registry_lock())?;
@@ -84,6 +87,7 @@ impl Store {
         context: &WorktreeContext,
         manager: Option<String>,
     ) -> Result<HookReport, StoreError> {
+        self.ensure_writable("cancel worktree removal")?;
         transitions::validate_value("manager", manager.as_deref())?;
         registry::validate_context(context)?;
         let mut report = {

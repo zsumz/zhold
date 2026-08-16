@@ -12,11 +12,13 @@ use crate::{
 };
 
 pub(crate) fn reconcile_initializations(store: &Store) -> Result<(), StoreError> {
+    store.ensure_writable("reconcile arena initialization")?;
     let _collection = ExclusiveFileLock::acquire(&store.layout.collection_lock())?;
     reconcile_initializations_locked(store)
 }
 
 pub(crate) fn reconcile_initializations_locked(store: &Store) -> Result<(), StoreError> {
+    store.ensure_writable("reconcile arena initialization")?;
     let root =
         store.layout.root().canonicalize().map_err(|error| {
             StoreError::io("canonicalize store root", store.layout.root(), error)

@@ -54,6 +54,7 @@ fn scan_reports_but_never_mutates_a_foreign_target() -> Result<(), Box<dyn std::
     fs::create_dir_all(&target)?;
     fs::write(target.join(".rustc_info.json"), b"{}")?;
     fs::write(target.join("artifact.rlib"), vec![0_u8; 1_024])?;
+    Store::open(&store)?;
 
     let output = zhold(&store, temporary.path(), &["scan", path_text(&root)?])?;
 
@@ -69,6 +70,7 @@ fn scan_reports_but_never_mutates_a_foreign_target() -> Result<(), Box<dyn std::
 fn doctor_reports_a_new_store_as_healthy() -> Result<(), Box<dyn std::error::Error>> {
     let temporary = tempdir()?;
     let store = temporary.path().join("store");
+    Store::open(&store)?;
 
     let output = zhold(&store, temporary.path(), &["doctor"])?;
 
@@ -112,6 +114,7 @@ fn managed_cargo_without_any_budget_requires_setup() -> Result<(), Box<dyn std::
 fn status_json_is_one_parseable_document() -> Result<(), Box<dyn std::error::Error>> {
     let temporary = tempdir()?;
     let store = temporary.path().join("store");
+    Store::open(&store)?;
 
     let output = zhold(&store, temporary.path(), &["--format", "json", "status"])?;
 
@@ -130,6 +133,7 @@ fn status_json_is_one_parseable_document() -> Result<(), Box<dyn std::error::Err
 fn deep_status_reconciles_the_physical_footprint() -> Result<(), Box<dyn std::error::Error>> {
     let temporary = tempdir()?;
     let store = temporary.path().join("store");
+    Store::open(&store)?;
 
     let output = zhold(
         &store,
