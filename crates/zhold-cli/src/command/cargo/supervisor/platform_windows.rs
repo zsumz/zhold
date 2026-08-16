@@ -40,10 +40,9 @@ impl PlatformSupervisor {
         };
         if let Err(error) = spawned() {
             let mut child = child;
-            let _kill = child.kill();
-            let _wait = child.wait();
+            let cleanup = terminate_group_child(&mut child).map(|_status| ());
             unregister_handlers(signal_ids);
-            return Err(SpawnError::after_child(error));
+            return Err(SpawnError::after_child(error, cleanup));
         }
         Ok(Self {
             child,
@@ -74,12 +73,7 @@ impl PlatformSupervisor {
     }
 
     fn kill_and_wait(&mut self) -> io::Result<ExitStatus> {
-        if let Err(error) = self.child.kill()
-            && error.kind() != io::ErrorKind::InvalidInput
-        {
-            return Err(error);
-        }
-        let status = self.child.wait();
+        let status = terminate_group_child(&mut self.child);
         self.clear_handlers();
         status
     }
@@ -87,6 +81,22 @@ impl PlatformSupervisor {
     fn clear_handlers(&mut self) {
         unregister_handlers(std::mem::take(&mut self.signal_ids));
     }
+}
+
+fn terminate_group_child(child: &mut GroupChild) -> io::Result<ExitStatus> {
+    if let Err(kill_error) = child.kill()
+        && kill_error.kind() != io::ErrorKind::InvalidInput
+    {
+        return match child.try_wait() {
+            Ok(Some(status)) => Ok(status),
+            Ok(None) => Err(kill_error),
+            Err(wait_error) => Err(io::Error::new(
+                kill_error.kind(),
+                format!("{kill_error}; failed to observe Cargo job: {wait_error}"),
+            )),
+        };
+    }
+    child.wait()
 }
 
 impl Drop for PlatformSupervisor {

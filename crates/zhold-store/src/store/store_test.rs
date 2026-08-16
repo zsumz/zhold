@@ -8,7 +8,7 @@ use crate::StoreError;
 use crate::{
     io::read_json,
     manifest::{ArenaManifest, StoreMarker},
-    test_support::{context, finish_succeeded, invocation, mark_spawned},
+    test_support::{context, finish_succeeded, invocation},
 };
 
 use super::Store;
@@ -102,28 +102,6 @@ fn dropped_reserved_lease_records_a_not_started_run() -> Result<(), Box<dyn std:
         Some(BuildOutcome::NotStarted)
     );
     assert!(!store.layout.reservation_profile().exists());
-    Ok(())
-}
-
-#[test]
-fn dropped_spawned_lease_records_a_terminated_run() -> Result<(), Box<dyn std::error::Error>> {
-    let temporary = tempdir()?;
-    let project = tempdir()?;
-    let store = Store::open(temporary.path())?;
-    let context = context(project.path())?;
-    let invocation = invocation(project.path())?;
-
-    let mut lease = store.lease(&context, &invocation)?;
-    mark_spawned(&mut lease)?;
-    fs::write(lease.build_dir().join("partial-output"), vec![0_u8; 64])?;
-    drop(lease);
-
-    let inventory = store.inventory()?;
-    assert_eq!(
-        inventory.arenas[0].record.last_outcome,
-        Some(BuildOutcome::Terminated)
-    );
-    assert!(store.layout.reservation_profile().is_file());
     Ok(())
 }
 

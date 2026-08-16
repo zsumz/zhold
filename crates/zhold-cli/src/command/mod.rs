@@ -19,6 +19,8 @@ mod setup;
 mod status;
 
 #[cfg(test)]
+mod cargo_test;
+#[cfg(test)]
 mod selector_test;
 
 pub(crate) use cargo::{CargoLimits, CargoReport};

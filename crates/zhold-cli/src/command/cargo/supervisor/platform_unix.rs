@@ -82,8 +82,8 @@ impl PlatformSupervisor {
         while group_alive(self.group)? {
             thread::sleep(std::time::Duration::from_millis(10));
         }
-        self.forwarder.stop()?;
         self.complete = true;
+        let _forwarder = self.forwarder.stop();
         Ok(())
     }
 
@@ -104,9 +104,26 @@ fn cleanup_failed_spawn(
     child: &mut GroupChild,
     setup_error: io::Error,
 ) -> Result<PlatformSupervisor, SpawnError> {
-    let _kill = child.kill();
-    let _wait = child.wait();
-    Err(SpawnError::after_child(setup_error))
+    Err(SpawnError::after_child(
+        setup_error,
+        terminate_group_child(child),
+    ))
+}
+
+fn terminate_group_child(child: &mut GroupChild) -> io::Result<()> {
+    if let Err(kill_error) = child.kill()
+        && kill_error.kind() != io::ErrorKind::InvalidInput
+    {
+        return match child.try_wait() {
+            Ok(Some(_status)) => Ok(()),
+            Ok(None) => Err(kill_error),
+            Err(wait_error) => Err(io::Error::new(
+                kill_error.kind(),
+                format!("{kill_error}; failed to observe Cargo process group: {wait_error}"),
+            )),
+        };
+    }
+    child.wait().map(|_status| ())
 }
 
 #[derive(Debug)]

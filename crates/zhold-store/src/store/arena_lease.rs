@@ -32,6 +32,7 @@ enum LeaseStage {
     Reserved,
     Spawning,
     Spawned,
+    Abandoned,
     Finalized,
 }
 
@@ -64,12 +65,10 @@ impl ArenaLease {
     pub(crate) fn queue_history(&mut self, draft: HistoryDraft) {
         self.pending_history.push(draft);
     }
-
     pub(crate) fn promote_paths(&mut self, arena_root: PathBuf, build_dir: PathBuf) {
         self.arena_root = arena_root;
         self.build_dir = build_dir;
     }
-
     /// Stable arena identity.
     pub fn arena_id(&self) -> &ArenaId {
         &self.arena_id
@@ -79,7 +78,6 @@ impl ArenaLease {
     pub fn arena_root(&self) -> &Path {
         &self.arena_root
     }
-
     /// Directory to provide through `CARGO_BUILD_BUILD_DIR`.
     pub fn build_dir(&self) -> &Path {
         &self.build_dir
@@ -150,9 +148,24 @@ impl ArenaLease {
                 BuildOutcome::Terminated,
                 self.measure().unwrap_or(self.initial_bytes),
             ),
-            LeaseStage::Finalized => return Ok(BuildFinalization::default()),
+            LeaseStage::Abandoned | LeaseStage::Finalized => {
+                return Ok(BuildFinalization::default());
+            }
         };
         self.finish_observed(outcome, observation)
+    }
+
+    /// Releases local locks without claiming that a spawned process tree exited.
+    ///
+    /// The durable unfinished lifecycle remains authoritative, so inventory exposes the arena as
+    /// suspect and neither reuse nor collection can proceed until explicit recovery.
+    pub fn leave_suspect(mut self) -> Result<(), StoreError> {
+        if !matches!(self.stage, LeaseStage::Spawning | LeaseStage::Spawned) {
+            return Err(self.invalid_transition("Suspect"));
+        }
+        self.stage = LeaseStage::Abandoned;
+        self.release_locks();
+        Ok(())
     }
 
     /// Records the bounded high-water observation used by build history.
@@ -245,14 +258,14 @@ impl ArenaLease {
 
 impl Drop for ArenaLease {
     fn drop(&mut self) {
-        if matches!(self.stage, LeaseStage::Finalized) {
+        if matches!(self.stage, LeaseStage::Abandoned | LeaseStage::Finalized) {
             return;
         }
-        let outcome = match self.stage {
-            LeaseStage::Reserved => BuildOutcome::NotStarted,
-            LeaseStage::Spawning | LeaseStage::Spawned => BuildOutcome::Terminated,
-            LeaseStage::Finalized => return,
-        };
+        if matches!(self.stage, LeaseStage::Spawning | LeaseStage::Spawned) {
+            self.stage = LeaseStage::Abandoned;
+            self.release_locks();
+            return;
+        }
         self.stage = LeaseStage::Finalized;
         if ensure_managed_directory(self.store.layout.root(), &self.build_dir).is_err() {
             self.release_locks();
@@ -266,7 +279,7 @@ impl Drop for ArenaLease {
         let build = self.store.finish_primary(
             &self.arena_id,
             &self.arena_root,
-            outcome,
+            BuildOutcome::NotStarted,
             ByteSize::ZERO,
             self.initial_bytes,
             final_bytes,
@@ -277,10 +290,6 @@ impl Drop for ArenaLease {
         if let Ok(primary) = build {
             if primary.durability_error.is_some() {
                 return;
-            }
-            if !matches!(outcome, BuildOutcome::NotStarted) {
-                let _warnings =
-                    self.learn_reservation(primary.command_class, primary.observed_growth);
             }
             self.pending_history.push(primary.history);
             for draft in self.pending_history.drain(..) {

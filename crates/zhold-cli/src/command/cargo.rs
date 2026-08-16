@@ -17,7 +17,7 @@ use crate::{
 };
 
 mod finalize;
-mod supervisor;
+pub(super) mod supervisor;
 
 const SENTINEL_ENV: &str = "ZHOLD_INTERNAL_CARGO_SENTINEL";
 const DEFAULT_BUILD_RESERVATION: ByteSize = ByteSize::from_bytes(1024 * 1024 * 1024);
@@ -134,11 +134,7 @@ fn execute_managed(
     let mut child = match child {
         Ok(value) => value,
         Err(failure) => {
-            if failure.child_created() {
-                finish_after_error(lease, format)?;
-            } else {
-                finish_after_spawn_failure(lease, format)?;
-            }
+            finish_after_supervision_failure(lease, failure.disposition(), format)?;
             return Err(CliError::Spawn {
                 directory: working_directory,
                 source: Box::new(failure.into_source()),
@@ -148,11 +144,11 @@ fn execute_managed(
     let initial_size = measured_or_zero(&lease);
     let status = match wait_for_cargo(&mut child) {
         Ok(value) => value,
-        Err(source) => {
-            finish_after_error(lease, format)?;
+        Err(failure) => {
+            finish_after_supervision_failure(lease, failure.disposition(), format)?;
             return Err(CliError::Wait {
                 directory: working_directory,
-                source: Box::new(source),
+                source: Box::new(failure.into_source()),
             });
         }
     };
@@ -179,16 +175,33 @@ fn execute_managed(
     finalize::execute(store, lease, &report, limits, format)
 }
 
-fn wait_for_cargo(
-    child: &mut supervisor::CargoSupervisor,
-) -> Result<ProcessExitStatus, std::io::Error> {
+pub(super) trait SupervisedChild {
+    fn try_wait(&mut self) -> Result<Option<ProcessExitStatus>, std::io::Error>;
+    fn terminate_and_wait(&mut self) -> Result<(), std::io::Error>;
+}
+
+impl SupervisedChild for supervisor::CargoSupervisor {
+    fn try_wait(&mut self) -> Result<Option<ProcessExitStatus>, std::io::Error> {
+        Self::try_wait(self)
+    }
+
+    fn terminate_and_wait(&mut self) -> Result<(), std::io::Error> {
+        Self::terminate_and_wait(self)
+    }
+}
+
+pub(super) fn wait_for_cargo(
+    child: &mut impl SupervisedChild,
+) -> Result<ProcessExitStatus, supervisor::WaitError> {
     loop {
         match child.try_wait() {
             Ok(Some(status)) => return Ok(status),
             Ok(None) => {}
             Err(error) => {
-                let _termination = child.terminate_and_wait();
-                return Err(error);
+                return Err(supervisor::WaitError::after_child(
+                    error,
+                    child.terminate_and_wait(),
+                ));
             }
         }
         thread::sleep(Duration::from_millis(20));
@@ -221,6 +234,18 @@ fn finish_after_spawn_failure(
     let finalization = lease.finish_spawn_failed()?;
     let _ignored = render::history_finalization(&finalization, format);
     Ok(())
+}
+
+fn finish_after_supervision_failure(
+    lease: zhold_store::ArenaLease,
+    disposition: supervisor::ChildDisposition,
+    format: OutputFormat,
+) -> Result<(), CliError> {
+    match disposition {
+        supervisor::ChildDisposition::NeverCreated => finish_after_spawn_failure(lease, format),
+        supervisor::ChildDisposition::CleanupConfirmed => finish_after_error(lease, format),
+        supervisor::ChildDisposition::CleanupUnconfirmed => Ok(lease.leave_suspect()?),
+    }
 }
 
 const fn format_name(format: OutputFormat) -> &'static str {
