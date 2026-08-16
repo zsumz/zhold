@@ -5,7 +5,9 @@ use zhold_core::ByteSize;
 use crate::{
     Store, StoreError,
     inventory::ensure_real_contained_directory,
-    io::{is_json_staging_path, measure_tree, read_json, remove_json, remove_tree, write_json},
+    io::{
+        is_json_publication_artifact, measure_tree, read_json, remove_json, remove_tree, write_json,
+    },
     lock::ExclusiveFileLock,
     manifest::{ArenaManifest, InitializationRecord},
     time::unix_seconds,
@@ -150,7 +152,7 @@ fn journal_paths(store: &Store) -> Result<Vec<std::path::PathBuf>, StoreError> {
                 .is_some_and(|extension| extension == "json")
             {
                 Some(Ok(path))
-            } else if is_json_staging_path(&path) {
+            } else if is_json_publication_artifact(&path) {
                 None
             } else {
                 Some(Err(StoreError::InvalidOwnership {

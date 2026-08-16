@@ -10,7 +10,7 @@ use crate::{
     StoreError,
     io::{
         configure_private_file,
-        json_publish::{JsonPublication, replace_with_backup, sync_metadata_directory},
+        json_publish::{JsonPublication, JsonSource, replace_with_backup, sync_metadata_directory},
         secure_file, secure_open_file, verify_file,
     },
 };
@@ -43,19 +43,23 @@ fn read_backup<T: DeserializeOwned>(path: &Path, primary: StoreError) -> Result<
     }
 }
 
-pub(crate) fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), StoreError> {
+pub(crate) fn write_json<T: DeserializeOwned + Serialize>(
+    path: &Path,
+    value: &T,
+) -> Result<(), StoreError> {
     match write_json_commit_aware(path, value)? {
         JsonPublication::Durable { .. } => Ok(()),
         JsonPublication::VisibleButDurabilityUnconfirmed { error } => Err(error),
     }
 }
 
-pub(crate) fn write_json_commit_aware<T: Serialize>(
+pub(crate) fn write_json_commit_aware<T: DeserializeOwned + Serialize>(
     path: &Path,
     value: &T,
 ) -> Result<JsonPublication, StoreError> {
     validate_metadata_parent(path)?;
     validate_existing_file(path)?;
+    let source = publication_source::<T>(path)?;
     let temporary = temporary_path(path);
     let bytes = encoded(path, value)?;
     let mut options = OpenOptions::new();
@@ -66,7 +70,7 @@ pub(crate) fn write_json_commit_aware<T: Serialize>(
         .map_err(|error| StoreError::io("create metadata staging file", &temporary, error))?;
     secure_open_file(&file, &temporary)?;
     write_and_sync(&mut file, &temporary, &bytes)?;
-    replace_with_backup(path, &temporary)
+    replace_with_backup(path, &temporary, source)
 }
 
 pub(crate) fn remove_json(path: &Path) -> Result<(), StoreError> {
@@ -118,13 +122,14 @@ fn read_one<T: DeserializeOwned>(path: &Path) -> Result<T, StoreError> {
 }
 
 #[cfg(test)]
-pub(super) fn write_json_with_fault<T: Serialize>(
+pub(super) fn write_json_with_fault<T: DeserializeOwned + Serialize>(
     path: &Path,
     value: &T,
     fault: &'static str,
 ) -> Result<JsonPublication, StoreError> {
     validate_metadata_parent(path)?;
     validate_existing_file(path)?;
+    let source = publication_source::<T>(path)?;
     let temporary = temporary_path(path);
     let bytes = encoded(path, value)?;
     let mut options = OpenOptions::new();
@@ -135,7 +140,7 @@ pub(super) fn write_json_with_fault<T: Serialize>(
         .map_err(|error| StoreError::io("create metadata staging file", &temporary, error))?;
     secure_open_file(&file, &temporary)?;
     write_and_sync(&mut file, &temporary, &bytes)?;
-    replace_with_backup_with(path, &temporary, |point| {
+    replace_with_backup_with(path, &temporary, source, |point| {
         let name = match point {
             PublicationPoint::PrimaryRotated => "primary_rotated",
             PublicationPoint::PrimaryPublished => "primary_published",
@@ -157,6 +162,31 @@ pub(super) fn write_json_with_fault<T: Serialize>(
             Ok(())
         }
     })
+}
+
+fn publication_source<T: DeserializeOwned>(path: &Path) -> Result<JsonSource, StoreError> {
+    match read_one::<T>(path) {
+        Ok(_value) => Ok(JsonSource::Primary),
+        Err(primary) if backup_eligible(&primary) => {
+            let backup = backup_path(path);
+            if is_real_file(&backup)? {
+                let _validated = read_one::<T>(&backup)?;
+                Ok(JsonSource::Backup)
+            } else if is_not_found(&primary) {
+                Ok(JsonSource::Absent)
+            } else {
+                Err(primary)
+            }
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn is_not_found(error: &StoreError) -> bool {
+    matches!(
+        error,
+        StoreError::Io { source, .. } if source.kind() == std::io::ErrorKind::NotFound
+    )
 }
 
 pub(super) fn validate_metadata_parent(path: &Path) -> Result<(), StoreError> {
@@ -224,7 +254,7 @@ pub(super) fn temporary_path(path: &Path) -> PathBuf {
     path.with_extension(format!("json.{}.new", uuid::Uuid::new_v4()))
 }
 
-pub(crate) fn is_json_staging_path(path: &Path) -> bool {
+fn is_json_staging_path(path: &Path) -> bool {
     let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
         return false;
     };
@@ -235,4 +265,14 @@ pub(crate) fn is_json_staging_path(path: &Path) -> bool {
         return false;
     };
     !primary.is_empty() && uuid::Uuid::parse_str(nonce).is_ok()
+}
+
+pub(crate) fn is_json_publication_artifact(path: &Path) -> bool {
+    if is_json_staging_path(path) {
+        return true;
+    }
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .and_then(|name| name.strip_suffix(".json.bak"))
+        .is_some_and(|primary| !primary.is_empty())
 }

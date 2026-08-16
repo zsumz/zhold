@@ -68,6 +68,39 @@ fn publishes_without_discarding_a_recoverable_backup() -> Result<(), Box<dyn std
 }
 
 #[test]
+fn fallback_replacement_preserves_a_valid_generation_at_every_fault()
+-> Result<(), Box<dyn std::error::Error>> {
+    let faults = [
+        "primary_rotated",
+        "primary_published",
+        "published_directory_sync",
+        "published_directory_synced",
+        "backup_removal",
+        "backup_removed",
+        "final_directory_sync",
+    ];
+    for fault in faults {
+        let temporary = tempdir()?;
+        let path = temporary.path().join("state.json");
+        let backup = path.with_extension("json.bak");
+        let stable = document(7, "stable");
+        let updated = document(8, "updated");
+        create_json(&path, &stable)?;
+        fs::copy(&path, &backup)?;
+        fs::write(&path, b"{\"revision\":")?;
+        assert_eq!(read_json::<Document>(&path)?, stable);
+
+        let _publication = write_json_with_fault(&path, &updated, fault);
+        let recovered = read_json::<Document>(&path)?;
+        assert!(
+            recovered == stable || recovered == updated,
+            "fault {fault} recovered {recovered:?}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn publication_faults_preserve_the_authoritative_commit_boundary()
 -> Result<(), Box<dyn std::error::Error>> {
     let cases = [

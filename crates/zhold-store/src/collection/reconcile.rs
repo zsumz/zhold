@@ -10,7 +10,7 @@ use super::{TrashEntry, TrashOutcome};
 use crate::{
     Store, StoreError,
     inventory::ensure_real_contained_directory,
-    io::{is_json_staging_path, measure_tree, read_json, remove_json, write_json},
+    io::{is_json_publication_artifact, measure_tree, read_json, remove_json, write_json},
     lock::{ExclusiveFileLock, LockState},
     manifest::{ArenaManifest, RetirementRecord},
 };
@@ -36,7 +36,7 @@ pub(super) fn reconcile_locked(store: &Store, dry_run: bool) -> Result<Reconcili
     let mut reclaimed = ByteSize::ZERO;
 
     for record_path in entry_paths(&store.layout.trash_index())? {
-        if is_json_staging_path(&record_path) {
+        if is_json_publication_artifact(&record_path) {
             continue;
         }
         let attempt = read_json::<RetirementRecord>(&record_path).and_then(|record| {

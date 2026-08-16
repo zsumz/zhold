@@ -152,6 +152,29 @@ fn a_reused_path_selects_the_new_live_registration() -> Result<(), Box<dyn std::
     Ok(())
 }
 
+#[test]
+fn registry_ignores_recognized_json_publication_artifacts() -> Result<(), Box<dyn std::error::Error>>
+{
+    let temporary = tempdir()?;
+    let store = Store::open(temporary.path().join("store"))?;
+    let root = temporary.path().join("worktree");
+    fs::create_dir(&root)?;
+    let context = test_support::context(&root)?;
+    let worktree = worktree_context(&context);
+    store.hook_ready(&worktree, HookMetadata::default())?;
+    let path = store.layout.worktree_integration(&worktree.key);
+    fs::copy(&path, path.with_extension("json.bak"))?;
+    fs::write(
+        path.with_extension("json.00000000-0000-4000-8000-000000000001.new"),
+        b"unpublished",
+    )?;
+
+    let summary = store.worktree_summary()?;
+    assert_eq!(summary.registration_count, 1);
+    assert_eq!(summary.finding_count, 0);
+    Ok(())
+}
+
 fn worktree_context(context: &crate::BuildContext) -> WorktreeContext {
     let key = WorktreeKey::derive(&context.repository_id, &context.worktree_id);
     WorktreeContext {

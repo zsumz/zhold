@@ -68,9 +68,11 @@ JSON writes use a same-directory unique staging file, file synchronization,
 atomic publication or rename, directory synchronization where available, and a
 recoverable primary backup during replacement. A visible primary is not called
 durable until its containing directory is synchronized. Later backup or staging
-cleanup failures are distinct non-authoritative warnings. Recognized staging
-files are ignored by enumerating readers and never treated as owned arenas,
-journals, or receipts.
+cleanup failures are distinct non-authoritative warnings. When a read recovers
+from a backup, replacement preserves that validated backup until the new primary
+is durable; a rejected primary is never rotated over it. Recognized staging and
+backup files are ignored by enumerating readers and never treated as owned
+arenas, journals, integrations, or receipts.
 
 ## Migration policy
 

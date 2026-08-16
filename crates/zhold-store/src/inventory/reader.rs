@@ -89,7 +89,7 @@ fn cached_trash(store: &crate::Store) -> Result<(ByteSize, Vec<InventoryFinding>
         let path = entry
             .map_err(|error| StoreError::io("read retirement journal", &index, error))?
             .path();
-        if crate::io::is_json_staging_path(&path) {
+        if crate::io::is_json_publication_artifact(&path) {
             continue;
         }
         let result = read_json::<RetirementRecord>(&path).and_then(|record| {

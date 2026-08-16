@@ -3,7 +3,10 @@ use std::{fs, path::Path, str::FromStr};
 use zhold_core::{WorktreeId, WorktreeIntegrationState, WorktreeKey};
 
 use super::{WorktreeFinding, WorktreeIntegration};
-use crate::{Store, StoreError, WorktreeContext, io::read_json};
+use crate::{
+    Store, StoreError, WorktreeContext,
+    io::{is_json_publication_artifact, read_json},
+};
 
 pub(crate) fn read_for_context(
     store: &Store,
@@ -47,6 +50,9 @@ pub(crate) fn scan(
             StoreError::io("read worktree integration entry", &directory, error)
         })?;
         let path = entry.path();
+        if is_json_publication_artifact(&path) {
+            continue;
+        }
         match read_path(store, &path) {
             Ok(record) => records.push(record),
             Err(error) => findings.push(WorktreeFinding {

@@ -9,7 +9,7 @@ use super::{
 };
 use crate::{
     Store, StoreError,
-    io::{is_json_staging_path, read_json},
+    io::{is_json_publication_artifact, read_json},
 };
 
 #[derive(Clone, Debug)]
@@ -132,7 +132,7 @@ pub(crate) fn read_receipts(
         let entry = entry
             .map_err(|error| StoreError::io("read history receipt entry", &directory, error))?;
         let path = entry.path();
-        if is_json_staging_path(&path) {
+        if is_json_publication_artifact(&path) {
             continue;
         }
         match read_receipt(store, &path) {
