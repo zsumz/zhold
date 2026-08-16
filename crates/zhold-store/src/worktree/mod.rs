@@ -4,8 +4,11 @@ mod admission;
 mod hooks;
 mod model;
 mod registry;
+mod registry_entry;
 mod transitions;
 
+#[cfg(test)]
+mod registry_test;
 #[cfg(test)]
 mod worktree_test;
 

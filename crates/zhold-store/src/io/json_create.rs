@@ -7,9 +7,10 @@ use crate::{
     io::{
         configure_private_file,
         json_file::{
-            encoded, remove_staging_file, temporary_path, validate_existing_file,
-            validate_metadata_parent, write_and_sync,
+            encoded, remove_staging_file, validate_existing_file, validate_metadata_parent,
+            write_and_sync,
         },
+        json_path::temporary_path,
         json_publish::{JsonPublication, PublicationPoint, sync_metadata_directory},
         secure_open_file,
     },

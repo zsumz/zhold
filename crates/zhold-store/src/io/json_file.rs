@@ -1,7 +1,7 @@
 use std::{
     fs::{self, OpenOptions},
     io::Write,
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use serde::{Serialize, de::DeserializeOwned};
@@ -10,6 +10,7 @@ use crate::{
     StoreError,
     io::{
         configure_private_file,
+        json_path::{backup_path, temporary_path},
         json_publish::{JsonPublication, JsonSource, replace_with_backup, sync_metadata_directory},
         secure_file, secure_open_file, verify_file,
     },
@@ -254,35 +255,4 @@ pub(super) fn is_real_file(path: &Path) -> Result<bool, StoreError> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
         Err(error) => Err(StoreError::io("inspect metadata path", path, error)),
     }
-}
-
-pub(super) fn backup_path(path: &Path) -> PathBuf {
-    path.with_extension("json.bak")
-}
-
-pub(super) fn temporary_path(path: &Path) -> PathBuf {
-    path.with_extension(format!("json.{}.new", uuid::Uuid::new_v4()))
-}
-
-fn is_json_staging_path(path: &Path) -> bool {
-    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
-        return false;
-    };
-    let Some(stem) = name.strip_suffix(".new") else {
-        return false;
-    };
-    let Some((primary, nonce)) = stem.rsplit_once(".json.") else {
-        return false;
-    };
-    !primary.is_empty() && uuid::Uuid::parse_str(nonce).is_ok()
-}
-
-pub(crate) fn is_json_publication_artifact(path: &Path) -> bool {
-    if is_json_staging_path(path) {
-        return true;
-    }
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .and_then(|name| name.strip_suffix(".json.bak"))
-        .is_some_and(|primary| !primary.is_empty())
 }

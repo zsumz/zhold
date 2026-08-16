@@ -74,8 +74,9 @@ is durable; a rejected primary is never rotated over it. When a valid primary
 and backup coexist after durability uncertainty, the primary file and directory
 entry are synchronized before the older backup is removed or the next
 replacement begins. Recognized staging and backup files are ignored by
-enumerating readers and never treated as owned arenas, journals, integrations,
-or receipts.
+immutable enumerating readers and never treated as owned arenas, journals, or
+receipts. Mutable registries normalize backups to their logical primary path so
+backup-only lifecycle records remain authoritative after restart.
 
 ## Migration policy
 

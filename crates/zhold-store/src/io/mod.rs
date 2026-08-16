@@ -2,6 +2,7 @@
 
 mod json_create;
 mod json_file;
+mod json_path;
 mod json_publish;
 mod permissions;
 mod tree;
@@ -14,8 +15,11 @@ mod json_file_test;
 mod tree_test;
 
 pub(crate) use json_create::{JsonCreation, create_json, create_json_commit_aware};
-pub(crate) use json_file::{
-    is_json_publication_artifact, read_json, remove_json, write_json, write_json_commit_aware,
+pub(crate) use json_file::{read_json, remove_json, write_json, write_json_commit_aware};
+pub(crate) use json_path::{
+    backup_path as json_backup_path, backup_primary_path as json_backup_primary_path,
+    is_publication_artifact as is_json_publication_artifact,
+    is_staging_path as is_json_staging_path,
 };
 pub(crate) use json_publish::{JsonPublication, sync_metadata_directory};
 pub(crate) use permissions::{

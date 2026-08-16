@@ -2,11 +2,8 @@ use std::{fs, path::Path, str::FromStr};
 
 use zhold_core::{WorktreeId, WorktreeIntegrationState, WorktreeKey};
 
-use super::{WorktreeFinding, WorktreeIntegration};
-use crate::{
-    Store, StoreError, WorktreeContext,
-    io::{is_json_publication_artifact, read_json},
-};
+use super::{WorktreeFinding, WorktreeIntegration, registry_entry};
+use crate::{Store, StoreError, WorktreeContext, io::read_json};
 
 pub(crate) fn read_for_context(
     store: &Store,
@@ -30,10 +27,10 @@ pub(crate) fn read(
     key: &WorktreeKey,
 ) -> Result<Option<WorktreeIntegration>, StoreError> {
     let path = store.layout.worktree_integration(key);
-    match fs::symlink_metadata(&path) {
-        Ok(_) => read_path(store, &path).map(Some),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(StoreError::io("inspect worktree integration", path, error)),
+    if registry_entry::document_exists(&path)? {
+        read_path(store, &path).map(Some)
+    } else {
+        Ok(None)
     }
 }
 
@@ -41,18 +38,9 @@ pub(crate) fn scan(
     store: &Store,
 ) -> Result<(Vec<WorktreeIntegration>, Vec<WorktreeFinding>), StoreError> {
     let directory = store.layout.worktree_integrations();
-    let entries = fs::read_dir(&directory)
-        .map_err(|error| StoreError::io("read worktree integrations", &directory, error))?;
     let mut records = Vec::new();
     let mut findings = Vec::new();
-    for entry in entries {
-        let entry = entry.map_err(|error| {
-            StoreError::io("read worktree integration entry", &directory, error)
-        })?;
-        let path = entry.path();
-        if is_json_publication_artifact(&path) {
-            continue;
-        }
+    for path in registry_entry::logical_paths(&directory)? {
         match read_path(store, &path) {
             Ok(record) => records.push(record),
             Err(error) => findings.push(WorktreeFinding {
@@ -136,14 +124,6 @@ pub(crate) fn validate_context(context: &WorktreeContext) -> Result<(), StoreErr
 }
 
 fn read_path(store: &Store, path: &Path) -> Result<WorktreeIntegration, StoreError> {
-    let metadata = fs::symlink_metadata(path)
-        .map_err(|error| StoreError::io("inspect worktree integration", path, error))?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() {
-        return Err(StoreError::InvalidOwnership {
-            path: path.to_path_buf(),
-            reason: "worktree integration is not a real file".to_owned(),
-        });
-    }
     let name = path
         .file_name()
         .and_then(|value| value.to_str())

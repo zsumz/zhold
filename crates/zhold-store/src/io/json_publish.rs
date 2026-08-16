@@ -3,7 +3,8 @@ use std::{fs, path::Path};
 use crate::{
     StoreError,
     io::{
-        json_file::{backup_path, is_real_file, validate_existing_file},
+        json_file::{is_real_file, validate_existing_file},
+        json_path::backup_path,
         secure_open_file,
     },
 };
