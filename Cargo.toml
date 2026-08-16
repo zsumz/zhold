@@ -30,8 +30,8 @@ tempfile = "3.21"
 thiserror = "2.0"
 toml = "0.9"
 uuid = { version = "1.18", features = ["serde", "v4"] }
-zhold-core = { path = "crates/zhold-core" }
-zhold-store = { path = "crates/zhold-store" }
+zhold-core = { path = "crates/zhold-core", version = "0.0.1" }
+zhold-store = { path = "crates/zhold-store", version = "0.0.1" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

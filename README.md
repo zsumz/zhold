@@ -14,11 +14,14 @@ surface can still change before the first release candidate.
 
 ## Start
 
-Install from this checkout with Rust 1.91.1 or newer:
+Install from crates.io with Rust 1.91.1 or newer:
 
 ```sh
-cargo install --path crates/zhold-cli --locked
+cargo install zhold --locked
 ```
+
+To install this repository checkout instead, run
+`cargo install --path crates/zhold-cli --locked`.
 
 Set one durable budget, then use Cargo normally through zhold:
 
