@@ -135,6 +135,10 @@ pub(super) fn create_json_with_fault<T: Serialize>(
             PublicationPoint::StagingRemoved => "staging_removed",
             PublicationPoint::BeforeFinalDirectorySync => "final_directory_sync",
             PublicationPoint::PrimaryRotated
+            | PublicationPoint::PrimaryWithBackupStabilized
+            | PublicationPoint::BeforePreviousBackupRemoval
+            | PublicationPoint::PreviousBackupRemoved
+            | PublicationPoint::PreviousBackupRemovalSynced
             | PublicationPoint::BeforeBackupRemoval
             | PublicationPoint::BackupRemoved => return Ok(()),
         };

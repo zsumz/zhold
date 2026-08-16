@@ -7,6 +7,8 @@ mod permissions;
 mod tree;
 
 #[cfg(test)]
+mod json_chain_test;
+#[cfg(test)]
 mod json_file_test;
 #[cfg(test)]
 mod tree_test;

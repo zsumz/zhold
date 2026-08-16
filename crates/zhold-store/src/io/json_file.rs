@@ -142,6 +142,10 @@ pub(super) fn write_json_with_fault<T: DeserializeOwned + Serialize>(
     write_and_sync(&mut file, &temporary, &bytes)?;
     replace_with_backup_with(path, &temporary, source, |point| {
         let name = match point {
+            PublicationPoint::PrimaryWithBackupStabilized => "primary_with_backup_stabilized",
+            PublicationPoint::BeforePreviousBackupRemoval => "previous_backup_removal",
+            PublicationPoint::PreviousBackupRemoved => "previous_backup_removed",
+            PublicationPoint::PreviousBackupRemovalSynced => "previous_backup_removal_synced",
             PublicationPoint::PrimaryRotated => "primary_rotated",
             PublicationPoint::PrimaryPublished => "primary_published",
             PublicationPoint::BeforePublishedDirectorySync => "published_directory_sync",
@@ -166,7 +170,13 @@ pub(super) fn write_json_with_fault<T: DeserializeOwned + Serialize>(
 
 fn publication_source<T: DeserializeOwned>(path: &Path) -> Result<JsonSource, StoreError> {
     match read_one::<T>(path) {
-        Ok(_value) => Ok(JsonSource::Primary),
+        Ok(_value) => {
+            if is_real_file(&backup_path(path))? {
+                Ok(JsonSource::PrimaryWithBackup)
+            } else {
+                Ok(JsonSource::PrimaryOnly)
+            }
+        }
         Err(primary) if backup_eligible(&primary) => {
             let backup = backup_path(path);
             if is_real_file(&backup)? {

@@ -2,7 +2,10 @@ use std::{fs, path::Path};
 
 use crate::{
     StoreError,
-    io::json_file::{backup_path, is_real_file, validate_existing_file},
+    io::{
+        json_file::{backup_path, is_real_file, validate_existing_file},
+        secure_open_file,
+    },
 };
 
 #[cfg(unix)]
@@ -16,7 +19,8 @@ pub(crate) enum JsonPublication {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum JsonSource {
-    Primary,
+    PrimaryOnly,
+    PrimaryWithBackup,
     Backup,
     Absent,
 }
@@ -43,6 +47,10 @@ impl JsonPublication {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum PublicationPoint {
+    PrimaryWithBackupStabilized,
+    BeforePreviousBackupRemoval,
+    PreviousBackupRemoved,
+    PreviousBackupRemovalSynced,
     PrimaryRotated,
     PrimaryPublished,
     BeforePublishedDirectorySync,
@@ -74,12 +82,22 @@ pub(super) fn replace_with_backup_with(
     let backup_exists = is_real_file(&backup)?;
     validate_source(path, source, primary_exists, backup_exists)?;
     match source {
-        JsonSource::Primary => {
-            if backup_exists {
-                fs::remove_file(&backup).map_err(|error| {
-                    StoreError::io("remove stale metadata backup", &backup, error)
-                })?;
-            }
+        JsonSource::PrimaryWithBackup => {
+            stabilize_primary(path)?;
+            checkpoint(PublicationPoint::PrimaryWithBackupStabilized)?;
+            checkpoint(PublicationPoint::BeforePreviousBackupRemoval)?;
+            fs::remove_file(&backup).map_err(|error| {
+                StoreError::io("remove previous metadata backup", &backup, error)
+            })?;
+            checkpoint(PublicationPoint::PreviousBackupRemoved)?;
+            sync_metadata_directory(path)?;
+            checkpoint(PublicationPoint::PreviousBackupRemovalSynced)?;
+            fs::rename(path, &backup)
+                .map_err(|error| StoreError::io("rotate metadata backup", path, error))?;
+            checkpoint(PublicationPoint::PrimaryRotated)?;
+            sync_metadata_directory(path)?;
+        }
+        JsonSource::PrimaryOnly => {
             fs::rename(path, &backup)
                 .map_err(|error| StoreError::io("rotate metadata backup", path, error))?;
             checkpoint(PublicationPoint::PrimaryRotated)?;
@@ -95,7 +113,11 @@ pub(super) fn replace_with_backup_with(
         JsonSource::Backup | JsonSource::Absent => {}
     }
     if let Err(error) = fs::rename(temporary, path) {
-        if matches!(source, JsonSource::Primary) && is_real_file(&backup)? {
+        if matches!(
+            source,
+            JsonSource::PrimaryOnly | JsonSource::PrimaryWithBackup
+        ) && is_real_file(&backup)?
+        {
             fs::rename(&backup, path)
                 .map_err(|recovery| StoreError::io("restore metadata backup", path, recovery))?;
             sync_metadata_directory(path)?;
@@ -145,7 +167,8 @@ fn validate_source(
     backup_exists: bool,
 ) -> Result<(), StoreError> {
     let consistent = match source {
-        JsonSource::Primary => primary_exists,
+        JsonSource::PrimaryOnly => primary_exists && !backup_exists,
+        JsonSource::PrimaryWithBackup => primary_exists && backup_exists,
         JsonSource::Backup => backup_exists,
         JsonSource::Absent => !primary_exists && !backup_exists,
     };
@@ -161,6 +184,15 @@ fn validate_source(
             ),
         ))
     }
+}
+
+fn stabilize_primary(path: &Path) -> Result<(), StoreError> {
+    let file = fs::File::open(path)
+        .map_err(|error| StoreError::io("open metadata primary for sync", path, error))?;
+    secure_open_file(&file, path)?;
+    file.sync_all()
+        .map_err(|error| StoreError::io("sync metadata primary", path, error))?;
+    sync_metadata_directory(path)
 }
 
 #[cfg(unix)]

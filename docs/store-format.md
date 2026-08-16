@@ -70,9 +70,12 @@ recoverable primary backup during replacement. A visible primary is not called
 durable until its containing directory is synchronized. Later backup or staging
 cleanup failures are distinct non-authoritative warnings. When a read recovers
 from a backup, replacement preserves that validated backup until the new primary
-is durable; a rejected primary is never rotated over it. Recognized staging and
-backup files are ignored by enumerating readers and never treated as owned
-arenas, journals, integrations, or receipts.
+is durable; a rejected primary is never rotated over it. When a valid primary
+and backup coexist after durability uncertainty, the primary file and directory
+entry are synchronized before the older backup is removed or the next
+replacement begins. Recognized staging and backup files are ignored by
+enumerating readers and never treated as owned arenas, journals, integrations,
+or receipts.
 
 ## Migration policy
 
