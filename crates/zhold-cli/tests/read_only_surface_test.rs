@@ -94,7 +94,7 @@ fn initialize(root: &Path) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn read_only_commands() -> Vec<&'static [&'static str]> {
-    let mut commands = vec![
+    let commands = vec![
         &["status"][..],
         &["status", "--deep"][..],
         &["scan"][..],
@@ -102,13 +102,16 @@ fn read_only_commands() -> Vec<&'static [&'static str]> {
         &["gc", "--dry-run"][..],
     ];
     #[cfg(feature = "experimental")]
-    commands.extend([
-        &["history"][..],
-        &["history", "prune", "--dry-run"][..],
-        &["history", "policy"][..],
-        &["quota", "status"][..],
-        &["quota", "plan", "1KiB"][..],
-    ]);
+    let commands = commands
+        .into_iter()
+        .chain([
+            &["history"][..],
+            &["history", "prune", "--dry-run"][..],
+            &["history", "policy"][..],
+            &["quota", "status"][..],
+            &["quota", "plan", "1KiB"][..],
+        ])
+        .collect();
     commands
 }
 
