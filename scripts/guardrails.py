@@ -237,6 +237,36 @@ def check_capability_boundaries(checks: Checks) -> None:
             f"{relative(path)} imports the store service directly",
         )
 
+    logical_json_readers = {
+        "crates/zhold-store/src/collection/initialization.rs",
+        "crates/zhold-store/src/history/index.rs",
+        "crates/zhold-store/src/history/reader.rs",
+        "crates/zhold-store/src/quota/expectation.rs",
+        "crates/zhold-store/src/reservation/service.rs",
+        "crates/zhold-store/src/store/config/service.rs",
+        "crates/zhold-store/src/store/initialization.rs",
+        "crates/zhold-store/src/worktree/registry.rs",
+    }
+    for name in logical_json_readers:
+        text = code(ROOT / name)
+        checks.require(
+            "read_optional_json" in text,
+            f"{name} can mistake a backup-only JSON document for absence",
+        )
+
+    logical_json_upserts = {
+        "crates/zhold-store/src/history/index.rs",
+        "crates/zhold-store/src/history/writer.rs",
+        "crates/zhold-store/src/reservation/service.rs",
+        "crates/zhold-store/src/store/config/service.rs",
+    }
+    for name in logical_json_upserts:
+        text = code(ROOT / name)
+        checks.require(
+            "upsert_json" in text,
+            f"{name} can create over a backup-only JSON document",
+        )
+
     persisted_models = [
         store / "manifest" / "arena_manifest.rs",
         store / "history" / "receipt.rs",

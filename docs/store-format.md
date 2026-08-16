@@ -75,8 +75,12 @@ and backup coexist after durability uncertainty, the primary file and directory
 entry are synchronized before the older backup is removed or the next
 replacement begins. Recognized staging and backup files are ignored by
 immutable enumerating readers and never treated as owned arenas, journals, or
-receipts. Mutable registries normalize backups to their logical primary path so
-backup-only lifecycle records remain authoritative after restart.
+receipts. Mutable logical documents treat the primary and backup as one record:
+optional reads report absence only when both paths are absent, upserts replace a
+backup-only generation through the normal publication protocol, and enumerating
+registries normalize backups to their logical primary path. This rule covers
+store identity and migration, configuration, reservation learning, history and
+worktree lifecycle state, quota expectations, and staged arena manifests.
 
 ## Migration policy
 
