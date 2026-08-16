@@ -1,7 +1,7 @@
 use std::fs;
 
 use tempfile::tempdir;
-use zhold_core::{BuildOutcome, ByteSize, CommandDescriptor};
+use zhold_core::{ArenaState, BuildOutcome, ByteSize, CommandDescriptor};
 
 use crate::{CargoInvocation, Store, io::read_json, manifest::ArenaManifest, test_support};
 
@@ -112,8 +112,12 @@ fn a_spawned_command_cannot_be_finalized_as_not_started() -> Result<(), Box<dyn 
     ));
 
     let manifest: ArenaManifest = read_json(&store.layout.manifest(context.arena_id()))?;
-    assert_eq!(manifest.last_outcome, Some(BuildOutcome::Terminated));
-    assert!(store.layout.reservation_profile().is_file());
+    assert_eq!(manifest.last_outcome, None);
+    assert_eq!(
+        store.inventory()?.arenas[0].record.state(),
+        ArenaState::Suspect
+    );
+    assert!(!store.layout.reservation_profile().exists());
     Ok(())
 }
 
