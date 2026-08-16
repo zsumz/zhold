@@ -8,9 +8,9 @@ default-members = ["crates/zhold-cli"]
 resolver = "3"
 
 [workspace.package]
-version = "0.0.1"
+version = "0.0.2"
 edition = "2024"
-rust-version = "1.91"
+rust-version = "1.91.1"
 license = "Apache-2.0"
 repository = "https://github.com/zsumz/zhold"
 authors = ["zsumz contributors"]
@@ -22,7 +22,7 @@ clap = { version = "4.5", features = ["derive", "env"] }
 command-group = "5.0"
 fs2 = "0.4"
 libc = "0.2"
-nix = { version = "0.27", default-features = false, features = ["process", "signal", "user"] }
+nix = { version = "0.27", default-features = false, features = ["process", "signal", "term", "user"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 signal-hook = "0.4"
@@ -30,8 +30,8 @@ tempfile = "3.21"
 thiserror = "2.0"
 toml = "0.9"
 uuid = { version = "1.18", features = ["serde", "v4"] }
-zhold-core = { path = "crates/zhold-core", version = "0.0.1" }
-zhold-store = { path = "crates/zhold-store", version = "0.0.1" }
+zhold-core = { path = "crates/zhold-core", version = "0.0.2" }
+zhold-store = { path = "crates/zhold-store", version = "0.0.2" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

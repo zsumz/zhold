@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CRATES = ROOT / "crates"
 MAX_RUST_LINES = 300
+MAX_SMOKE_LINES = 150
 
 
 class Checks:
@@ -52,6 +53,32 @@ def check_required_files(checks: Checks) -> None:
         "docs/safety.md",
         "docs/store-format.md",
         "scripts/check",
+        "scripts/check-release.py",
+        "scripts/check-smoke-types.mjs",
+        "scripts/package-smoke",
+        "scripts/registry-smoke",
+        "scripts/release-check",
+        "scripts/smoke",
+        "scripts/smoke.ps1",
+        "smoke/admission.smoke.mts",
+        "smoke/cli.smoke.mts",
+        "smoke/collection.smoke.mts",
+        "smoke/concurrency.smoke.mts",
+        "smoke/failure.smoke.mts",
+        "smoke/foreign.smoke.mts",
+        "smoke/interruption.smoke.mts",
+        "smoke/invocation.smoke.mts",
+        "smoke/orphan.smoke.mts",
+        "smoke/tooling.smoke.mts",
+        "smoke/worktrees.smoke.mts",
+        "smoke/support/compiler.mts",
+        "smoke/support/events.mts",
+        "smoke/support/fixture.mts",
+        "smoke/support/git.mts",
+        "smoke/support/json.mts",
+        "smoke/support/process.mts",
+        "smoke/support/project.mts",
+        "smoke/support/zhold.mts",
     ]
     for name in required:
         checks.require((ROOT / name).is_file(), f"missing required file {name}")
@@ -63,7 +90,7 @@ def check_workspace(checks: Checks) -> None:
     package = workspace.get("package", {})
     checks.require(workspace.get("resolver") == "3", "workspace resolver must be 3")
     checks.require(package.get("edition") == "2024", "workspace edition must be 2024")
-    checks.require(package.get("rust-version") == "1.91", "workspace MSRV must be 1.91")
+    checks.require(package.get("rust-version") == "1.91.1", "workspace MSRV must be 1.91.1")
 
     expected = {
         "crates/zhold-cli",
@@ -94,7 +121,18 @@ def check_workspace(checks: Checks) -> None:
 
 def check_name_contract(checks: Checks) -> None:
     legacy = "z" + "stash"
-    suffixes = {".json", ".md", ".py", ".rs", ".toml", ".yml", ".yaml"}
+    suffixes = {
+        ".json",
+        ".md",
+        ".mjs",
+        ".mts",
+        ".ps1",
+        ".py",
+        ".rs",
+        ".toml",
+        ".yml",
+        ".yaml",
+    }
     for path in sorted(ROOT.rglob("*")):
         if not path.is_file() or ".git" in path.parts:
             continue
@@ -153,6 +191,89 @@ def check_rust(checks: Checks) -> None:
             checks.require(path.name.endswith("_test.rs"), f"tests must be separate: {name}")
         if path.name in {"lib.rs", "mod.rs"}:
             checks.require(not facade_item.search(text), f"facade contains implementation item: {name}")
+
+
+def check_smoke(checks: Checks) -> None:
+    smoke_root = ROOT / "smoke"
+    suite_declaration = re.compile(
+        r"^(?:export\s+)?(?:async\s+function|function|class|const|enum|interface|let|type|var)\b",
+        re.MULTILINE,
+    )
+    for path in sorted(smoke_root.rglob("*.mts")):
+        text = path.read_text(encoding="utf-8")
+        name = relative(path)
+        check_text_hygiene(checks, path, text)
+        line_count = len(text.splitlines())
+        checks.require(
+            line_count <= MAX_SMOKE_LINES,
+            f"{name} has {line_count} lines; maximum is {MAX_SMOKE_LINES}",
+        )
+        if path.name.endswith(".smoke.mts"):
+            checks.require("smoke.suite(" in text, f"{name} must register a smoke suite")
+            checks.require(
+                suite_declaration.search(text) is None,
+                f"{name} contains a helper or type declaration; move it to smoke/support",
+            )
+
+    for name in ["package.json", "package-lock.json", "smoke/package.json", "smoke/tsconfig.json"]:
+        checks.require(not (ROOT / name).exists(), f"{name} is not needed for npx smoke tests")
+
+    runner = (ROOT / "scripts" / "smoke").read_text(encoding="utf-8")
+    windows_runner = (ROOT / "scripts" / "smoke.ps1").read_text(encoding="utf-8")
+    typecheck = (ROOT / "scripts" / "check-smoke-types.mjs").read_text(encoding="utf-8")
+    smoke_scripts = [
+        ROOT / "scripts" / "smoke",
+        ROOT / "scripts" / "smoke.ps1",
+        ROOT / "scripts" / "check-smoke-types.mjs",
+    ]
+    for path in smoke_scripts:
+        text = path.read_text(encoding="utf-8")
+        check_text_hygiene(checks, path, text)
+        checks.require(
+            len(text.splitlines()) <= MAX_SMOKE_LINES,
+            f"{relative(path)} exceeds the {MAX_SMOKE_LINES}-line smoke support limit",
+        )
+    checks.require("npx --yes" in runner, "scripts/smoke must run Smoque through npx")
+    checks.require("smoque@0.1.2" in runner, "scripts/smoke must pin the Smoque version")
+    checks.require("smoque@0.1.2" in windows_runner, "scripts/smoke.ps1 must pin Smoque")
+    checks.require("typescript@5.9.3" in typecheck, "smoke typechecking must pin TypeScript")
+    checks.require("smoque@0.1.2" in typecheck, "smoke typechecking must pin Smoque types")
+    checks.require("undici-types@6.21.0" in typecheck, "smoke type dependencies must be pinned")
+
+
+def check_release_scripts(checks: Checks) -> None:
+    names = [
+        "scripts/check-release.py",
+        "scripts/package-smoke",
+        "scripts/registry-smoke",
+        "scripts/release-check",
+    ]
+    texts: dict[str, str] = {}
+    for name in names:
+        path = ROOT / name
+        content = path.read_text(encoding="utf-8")
+        texts[name] = content
+        check_text_hygiene(checks, path, content)
+        checks.require(
+            len(content.splitlines()) <= MAX_SMOKE_LINES,
+            f"{name} exceeds the {MAX_SMOKE_LINES}-line release support limit",
+        )
+
+    package = texts["scripts/package-smoke"]
+    registry = texts["scripts/registry-smoke"]
+    release = texts["scripts/release-check"]
+    tag = texts["scripts/check-release.py"]
+    checks.require("cargo package --locked" in package, "package smoke must use locked packages")
+    checks.require("--workspace" in package, "package smoke must package unpublished workspace dependencies together")
+    checks.require("cargo install" in package, "package smoke must install the packaged CLI")
+    checks.require("cargo install zhold --version" in registry, "registry smoke must install by version")
+    checks.require("--locked" in registry, "registry smoke must use the published lockfile")
+    checks.require("git(\"tag\", \"-v\", tag)" in tag, "release tag signature must be verified")
+    checks.require("git(\"verify-commit\", \"HEAD\")" in tag, "release commit must be verified")
+    required_order = ["scripts/check-release.py", "./scripts/check", "./scripts/smoke", "./scripts/package-smoke"]
+    positions = [release.find(item) for item in required_order]
+    checks.require(all(position >= 0 for position in positions), "release check is missing a gate")
+    checks.require(positions == sorted(positions), "release check gates are out of order")
 
 
 def check_test_modules(checks: Checks) -> None:
@@ -401,6 +522,8 @@ def main() -> int:
     check_workspace(checks)
     check_name_contract(checks)
     check_rust(checks)
+    check_smoke(checks)
+    check_release_scripts(checks)
     check_test_modules(checks)
     check_capability_boundaries(checks)
     check_delimiters(checks)

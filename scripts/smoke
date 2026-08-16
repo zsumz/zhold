@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+npm_cache="${NPM_CONFIG_CACHE:-${TMPDIR:-/tmp}/zhold-smoque-npm-cache}"
+smoque_package="smoque@0.1.2"
+install_root=""
+
+export NPM_CONFIG_CACHE="$npm_cache"
+
+cleanup() {
+  if [[ -n "$install_root" ]]; then
+    rm -rf -- "$install_root"
+  fi
+}
+
+install_zhold() {
+  if [[ -n "${ZHOLD_SMOKE_BIN:-}" ]]; then
+    return
+  fi
+
+  install_root="$(mktemp -d "${TMPDIR:-/tmp}/zhold-smoke-install.XXXXXX")"
+  cargo install --path "$repo_root/crates/zhold-cli" --locked --root "$install_root"
+  ZHOLD_SMOKE_BIN="$install_root/bin/zhold"
+  export ZHOLD_SMOKE_BIN
+}
+
+run_smoque() {
+  local arguments=(run "$@")
+  if [[ -n "${CI:-}" ]]; then
+    arguments+=(--ci)
+  fi
+  npx --yes "$smoque_package" "${arguments[@]}"
+}
+
+trap cleanup EXIT
+cd "$repo_root"
+
+case "${1:-}" in
+  types)
+    node scripts/check-smoke-types.mjs
+    ;;
+  doctor | list | --help | -h | --version)
+    npx --yes "$smoque_package" "$@"
+    ;;
+  *.smoke.mts | */*.smoke.mts)
+    install_zhold
+    run_smoque "$@"
+    ;;
+  *)
+    node scripts/check-smoke-types.mjs
+    install_zhold
+    run_smoque smoke/ "$@"
+    ;;
+esac

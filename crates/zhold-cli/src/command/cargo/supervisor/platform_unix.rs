@@ -22,12 +22,17 @@ use signal_hook::{
 
 use super::SpawnError;
 
+mod terminal;
+
+use terminal::ForegroundTerminal;
+
 #[derive(Debug)]
 pub(in crate::command::cargo) struct PlatformSupervisor {
     child: GroupChild,
     group: Pid,
     leader_status: Option<ExitStatus>,
     forwarder: SignalForwarder,
+    terminal: ForegroundTerminal,
     complete: bool,
 }
 
@@ -50,11 +55,20 @@ impl PlatformSupervisor {
             Ok(forwarder) => forwarder,
             Err(error) => return cleanup_failed_spawn(&mut child, error),
         };
+        let mut forwarder = forwarder;
+        let terminal = match ForegroundTerminal::hand_off(group) {
+            Ok(terminal) => terminal,
+            Err(error) => {
+                let _forwarder = forwarder.stop();
+                return cleanup_failed_spawn(&mut child, error);
+            }
+        };
         Ok(Self {
             child,
             group,
             leader_status: None,
             forwarder,
+            terminal,
             complete: false,
         })
     }
@@ -65,6 +79,7 @@ impl PlatformSupervisor {
             self.leader_status = self.child.try_wait()?;
         }
         if self.leader_status.is_some() && !group_alive(self.group)? {
+            self.terminal.restore()?;
             self.forwarder.stop()?;
             self.complete = true;
             return Ok(self.leader_status);
@@ -82,8 +97,9 @@ impl PlatformSupervisor {
         while group_alive(self.group)? {
             thread::sleep(std::time::Duration::from_millis(10));
         }
+        self.terminal.restore()?;
+        self.forwarder.stop()?;
         self.complete = true;
-        let _forwarder = self.forwarder.stop();
         Ok(())
     }
 

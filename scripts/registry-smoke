@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -ne 1 || ! "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "usage: scripts/registry-smoke VERSION" >&2
+  exit 2
+fi
+version="$1"
+
+temporary="$(mktemp -d "${TMPDIR:-/tmp}/zhold-registry-smoke.XXXXXX")"
+cleanup() {
+  if [[ -n "${temporary:-}" && -d "$temporary" ]]; then
+    rm -rf -- "$temporary"
+  fi
+}
+trap cleanup EXIT
+
+export CARGO_HOME="$temporary/cargo-home"
+export CARGO_TARGET_DIR="$temporary/target"
+install_root="$temporary/install"
+cargo install zhold --version "$version" --locked --root "$install_root"
+
+actual="$($install_root/bin/zhold --version)"
+expected="zhold $version"
+if [[ "$actual" != "$expected" ]]; then
+  echo "registry version mismatch: expected '$expected', found '$actual'" >&2
+  exit 1
+fi
+echo "registry smoke passed: $actual"

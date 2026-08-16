@@ -8,7 +8,7 @@ zhold manages Cargo intermediate files for repositories that use multiple Git
 worktrees. Each worktree keeps isolated, reusable build storage. zhold removes
 inactive storage to stay near one configured budget.
 
-`0.0.1` is a public alpha. Rust 1.91.1 or newer is required.
+zhold is a public alpha. Rust 1.91.1 or newer is required.
 
 ## Problem
 
@@ -81,6 +81,8 @@ See the [safety and threat model](docs/safety.md) for the exact guarantees.
 ```sh
 cargo install --path crates/zhold-cli --locked
 ./scripts/check
+./scripts/smoke
+./scripts/package-smoke
 ```
 
 See [design](docs/design.md), [locking](docs/locking.md), and

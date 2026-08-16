@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+manifest_version="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')"
+version="${1:-$manifest_version}"
+if [[ "$version" != "$manifest_version" ]]; then
+  echo "requested version $version does not match workspace version $manifest_version" >&2
+  exit 2
+fi
+
+temporary="$(mktemp -d "${TMPDIR:-/tmp}/zhold-package-smoke.XXXXXX")"
+cleanup() {
+  if [[ -n "${temporary:-}" && -d "$temporary" ]]; then
+    rm -rf -- "$temporary"
+  fi
+}
+trap cleanup EXIT
+
+package_target="$temporary/package-target"
+extracted="$temporary/extracted"
+mkdir -p "$extracted"
+
+cargo package --locked --allow-dirty --no-verify --workspace --target-dir "$package_target"
+for package in zhold-core zhold-store zhold; do
+  archive="$package_target/package/$package-$version.crate"
+  if [[ ! -f "$archive" ]]; then
+    echo "missing package archive: $archive" >&2
+    exit 1
+  fi
+  LC_ALL=C tar -xzf "$archive" -C "$extracted"
+done
+
+core="$extracted/zhold-core-$version"
+store="$extracted/zhold-store-$version"
+cli="$extracted/zhold-$version"
+required_files=(
+  "$core/.cargo_vcs_info.json"
+  "$core/Cargo.lock"
+  "$core/Cargo.toml"
+  "$core/Cargo.toml.orig"
+  "$core/README.md"
+  "$core/src/lib.rs"
+  "$store/.cargo_vcs_info.json"
+  "$store/Cargo.lock"
+  "$store/Cargo.toml"
+  "$store/Cargo.toml.orig"
+  "$store/README.md"
+  "$store/src/lib.rs"
+  "$cli/.cargo_vcs_info.json"
+  "$cli/Cargo.lock"
+  "$cli/Cargo.toml"
+  "$cli/Cargo.toml.orig"
+  "$cli/README.md"
+  "$cli/src/lib.rs"
+  "$cli/src/main.rs"
+)
+for required in "${required_files[@]}"; do
+  if [[ ! -f "$required" ]]; then
+    echo "packaged file is missing: $required" >&2
+    exit 1
+  fi
+done
+
+export CARGO_HOME="$temporary/cargo-home"
+export CARGO_TARGET_DIR="$temporary/consumer-target"
+install_root="$temporary/install"
+cargo install \
+  --path "$cli" \
+  --root "$install_root" \
+  --locked \
+  --config "patch.crates-io.zhold-core.path='$core'" \
+  --config "patch.crates-io.zhold-store.path='$store'"
+
+actual="$($install_root/bin/zhold --version)"
+expected="zhold $version"
+if [[ "$actual" != "$expected" ]]; then
+  echo "installed version mismatch: expected '$expected', found '$actual'" >&2
+  exit 1
+fi
+echo "package smoke passed: $actual"

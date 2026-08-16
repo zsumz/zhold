@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -ne 1 ]]; then
+  echo "usage: scripts/release-check VERSION" >&2
+  exit 2
+fi
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+python3 scripts/check-release.py source "$1"
+./scripts/check
+./scripts/smoke
+./scripts/package-smoke "$1"
