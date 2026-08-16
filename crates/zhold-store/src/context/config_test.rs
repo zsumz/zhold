@@ -21,6 +21,31 @@ fn fingerprints_are_store_keyed_and_include_sensitive() -> Result<(), Box<dyn st
     Ok(())
 }
 
+#[test]
+fn inline_configuration_include_is_an_explicit_compatibility_error()
+-> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempfile::tempdir()?;
+    let invocation = CargoInvocation::new(
+        "cargo".to_owned(),
+        vec![
+            "--config".to_owned(),
+            "include=['compiler.toml']".to_owned(),
+            "check".to_owned(),
+        ],
+        temporary.path().to_path_buf(),
+    )?;
+    let Some(error) = super::config_identity::resolve(&invocation, &[4; 32]).err() else {
+        return Err("inline include unexpectedly resolved".into());
+    };
+
+    assert!(
+        error
+            .to_string()
+            .contains("Cargo configuration include is supported only from configuration files")
+    );
+    Ok(())
+}
+
 fn explicit_invocation(
     root: &std::path::Path,
     config: &std::path::Path,
