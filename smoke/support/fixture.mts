@@ -8,7 +8,6 @@ import { writeCargoProject } from "./project.mts";
 export {
   addFailingBuildScript,
   addInterruptBuildScript,
-  addWaitingBuildScript,
 } from "./project.mts";
 
 export interface WorktreeFixture {

@@ -42,7 +42,10 @@ smoke.suite("installed interruption", async (t) => {
       ],
       {
         cwd: fixture.repository,
-        env: { ZHOLD_SMOKE_CHILD_PID: childPid },
+        env: {
+          ZHOLD_INTERNAL_CARGO_SENTINEL: "1",
+          ZHOLD_SMOKE_CHILD_PID: childPid,
+        },
         name: "interrupt-build",
         ready: t.fs.ready(childPid),
         timeout: "20s",
@@ -53,7 +56,7 @@ smoke.suite("installed interruption", async (t) => {
   await t.step("forward termination through Cargo descendants", async () => {
     const pid = (await t.fs.readText(zholdPid)).trim();
     try {
-      await t.cmd("kill", ["-TERM", `-${pid}`]);
+      await t.cmd("kill", ["-TERM", pid]);
       await t.poll(
         "interrupted Cargo finalization",
         () => front.stderr().includes('"event":"cargo_finished"'),

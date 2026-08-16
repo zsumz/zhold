@@ -40,26 +40,6 @@ export async function addFailingBuildScript(
   );
 }
 
-export async function addWaitingBuildScript(
-  t: SmokeContext,
-  repository: string,
-): Promise<void> {
-  await t.fs.writeText(
-    join(repository, "build.rs"),
-    `use std::{env, fs, path::Path, thread, time::Duration};
-
-fn main() {
-    let ready = env::var("ZHOLD_SMOKE_READY").expect("ready path");
-    let release = env::var("ZHOLD_SMOKE_RELEASE").expect("release path");
-    fs::write(ready, "ready\n").expect("write ready marker");
-    while !Path::new(&release).is_file() {
-        thread::sleep(Duration::from_millis(10));
-    }
-}
-`,
-  );
-}
-
 export async function addInterruptBuildScript(
   t: SmokeContext,
   repository: string,

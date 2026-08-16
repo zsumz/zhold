@@ -1,21 +1,20 @@
 import { expect, smoke } from "smoque";
 
-import {
-  addWaitingBuildScript,
-  createRepositoryFixture,
-} from "./support/fixture.mts";
+import { createBlockingRustcWrapper } from "./support/blocking-rustc.mts";
+import { createRepositoryFixture } from "./support/fixture.mts";
 import { parseCargoFinish } from "./support/events.mts";
 import { readInventory, runZhold, zholdBinary } from "./support/zhold.mts";
 
 smoke.suite("concurrent admission", async (t) => {
   const work = await t.tempDir("zhold-concurrency");
-  const firstProject = await t.step("create the reserved build", async () => {
-    const fixture = await createRepositoryFixture(t, work, "first-repository");
-    await addWaitingBuildScript(t, fixture.repository);
-    return fixture;
-  });
+  const firstProject = await t.step("create the reserved build", async () =>
+    createRepositoryFixture(t, work, "first-repository")
+  );
   const secondProject = await t.step("create the competing build", async () =>
     createRepositoryFixture(t, work, "second-repository")
+  );
+  const blocker = await t.step("compile the reservation blocker", async () =>
+    createBlockingRustcWrapper(t, work)
   );
   const ready = work.path("first-build-ready");
   const release = work.path("release-first-build");
@@ -36,6 +35,7 @@ smoke.suite("concurrent admission", async (t) => {
       {
         cwd: firstProject.repository,
         env: {
+          RUSTC_WRAPPER: blocker,
           ZHOLD_SMOKE_READY: ready,
           ZHOLD_SMOKE_RELEASE: release,
         },
