@@ -38,7 +38,8 @@ supervision, and provider compilation.
 - active filesystem mutation and uncertain accounting;
 - two simultaneous admissions competing for one budget;
 - SIGINT, SIGTERM, repeated interrupt, and descendants outliving Cargo;
-- Unix PTY stdin, Ctrl-C delivery, and terminal restoration after every outcome;
+- Unix PTY stdin, Ctrl-C delivery, Ctrl-Z foreground/background resume, and
+  terminal restoration after every outcome;
 - finalization and post-build collection corruption;
 - pending-trash recovery and restart at durable transition points;
 - low free space and adopted-quota drift;

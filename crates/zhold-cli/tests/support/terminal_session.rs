@@ -22,7 +22,7 @@ pub(crate) struct PtySession {
     output: Receiver<Vec<u8>>,
     captured: Vec<u8>,
     session_group: Pid,
-    managed_group: Option<Pid>,
+    managed_groups: Vec<Pid>,
     complete: bool,
 }
 
@@ -46,7 +46,7 @@ impl PtySession {
             output,
             captured: Vec::new(),
             session_group,
-            managed_group: None,
+            managed_groups: Vec::new(),
             complete: false,
         })
     }
@@ -110,25 +110,33 @@ impl PtySession {
     }
 
     pub(crate) fn wait_for_foreground(
-        &self,
+        &mut self,
         expected: Pid,
         timeout: Duration,
     ) -> Result<(), io::Error> {
         let deadline = Instant::now() + timeout;
         while Instant::now() < deadline {
+            self.drain_output();
             if self.foreground_group() == Some(expected) {
                 return Ok(());
             }
             thread::sleep(WAIT_STEP);
         }
+        self.drain_output();
         Err(io::Error::new(
             io::ErrorKind::TimedOut,
-            format!("PTY foreground did not become {expected}"),
+            format!(
+                "PTY foreground did not become {expected}; actual: {:?}; output: {:?}",
+                self.foreground_group(),
+                self.text()
+            ),
         ))
     }
 
     pub(crate) fn track_group(&mut self, group: Pid) {
-        self.managed_group = Some(group);
+        if !self.managed_groups.contains(&group) {
+            self.managed_groups.push(group);
+        }
     }
 
     pub(crate) fn is_running(&mut self) -> Result<bool, io::Error> {
@@ -141,10 +149,10 @@ impl PtySession {
 
     fn terminate(&mut self) {
         let foreground = self.foreground_group();
-        for group in [self.managed_group, foreground, Some(self.session_group)]
-            .into_iter()
-            .flatten()
-        {
+        let mut groups = self.managed_groups.clone();
+        groups.extend([foreground, Some(self.session_group)].into_iter().flatten());
+        groups.dedup();
+        for group in groups {
             let _killed = killpg(group, Signal::SIGKILL);
         }
         let _killed = self.child.kill();

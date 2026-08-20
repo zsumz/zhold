@@ -90,7 +90,7 @@ fn manifest() -> &'static str {
 }
 
 fn program() -> &'static str {
-    "use std::{env, io, io::BufRead, path::Path, process::Command, thread, time::Duration};\n\
+    "use std::{env, fs, io, io::BufRead, path::Path, process::Command, thread, time::Duration};\n\
      fn main() -> io::Result<()> {\n\
          println!(\"READY\");\n\
          match env::args().nth(1).as_deref() {\n\
@@ -101,6 +101,21 @@ fn program() -> &'static str {
              }\n\
              Some(\"fail\") => std::process::exit(23),\n\
              Some(\"release\") => {\n\
+                 let release = env::var_os(\"ZHOLD_TEST_RELEASE\")\n\
+                     .ok_or_else(|| io::Error::other(\"release marker is missing\"))?;\n\
+                 while !Path::new(&release).is_file() {\n\
+                     thread::sleep(Duration::from_millis(10));\n\
+                 }\n\
+             }\n\
+             Some(\"suspend\") => {\n\
+                 let probe = env::var_os(\"ZHOLD_TEST_SUSPEND_PROBE\")\n\
+                     .ok_or_else(|| io::Error::other(\"resume probe is missing\"))?;\n\
+                 while !Path::new(&probe).is_file() {\n\
+                     thread::sleep(Duration::from_millis(10));\n\
+                 }\n\
+                 let resumed = env::var_os(\"ZHOLD_TEST_SUSPEND_RESUMED\")\n\
+                     .ok_or_else(|| io::Error::other(\"resumed marker is missing\"))?;\n\
+                 fs::write(resumed, b\"resumed\")?;\n\
                  let release = env::var_os(\"ZHOLD_TEST_RELEASE\")\n\
                      .ok_or_else(|| io::Error::other(\"release marker is missing\"))?;\n\
                  while !Path::new(&release).is_file() {\n\

@@ -12,9 +12,12 @@ use zhold_store::Store;
 mod terminal_fixture;
 #[path = "support/terminal_reclaim_fixture.rs"]
 mod terminal_reclaim_fixture;
+#[path = "support/terminal_suspend_fixture.rs"]
+mod terminal_suspend_fixture;
 
 use terminal_fixture::{TerminalFixture, process_group_is_alive};
 use terminal_reclaim_fixture::TerminalReclaimFixture;
+use terminal_suspend_fixture::{ResumeMode, TerminalSuspendFixture};
 
 const TIMEOUT: Duration = Duration::from_secs(90);
 
@@ -155,6 +158,90 @@ fn terminal_restore_does_not_overwrite_a_new_foreground_owner()
 }
 
 #[test]
+fn ctrl_z_stops_the_wrapper_and_foreground_resume_restores_cargo()
+-> Result<(), Box<dyn std::error::Error>> {
+    exercise_suspend_resume(ResumeMode::Foreground, false)
+}
+
+#[test]
+fn ctrl_z_background_resume_does_not_take_the_terminal() -> Result<(), Box<dyn std::error::Error>> {
+    exercise_suspend_resume(ResumeMode::Background, false)
+}
+
+#[test]
+fn ctrl_z_background_resume_can_return_to_the_foreground() -> Result<(), Box<dyn std::error::Error>>
+{
+    exercise_suspend_resume(ResumeMode::Background, true)
+}
+
+fn exercise_suspend_resume(
+    mode: ResumeMode,
+    promote: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let fixture = TerminalSuspendFixture::create()?;
+    let mut session = fixture.spawn()?;
+
+    session.wait_for("READY", TIMEOUT)?;
+    let cargo_group = session
+        .foreground_group()
+        .ok_or("PTY has no foreground process group")?;
+    let front_group = fixture.front_pid(TIMEOUT)?;
+    let driver_group = session.session_group();
+    assert_ne!(cargo_group, front_group);
+    assert_ne!(cargo_group, driver_group);
+    assert_ne!(front_group, driver_group);
+    session.track_group(cargo_group);
+    session.track_group(front_group);
+
+    session.write(&[26])?;
+    session.wait_for("JOB_STOPPED:SIGTSTP", Duration::from_secs(20))?;
+    session.wait_for_foreground(driver_group, Duration::from_secs(10))?;
+    assert!(process_group_is_alive(cargo_group)?);
+    assert!(process_group_is_alive(front_group)?);
+    let active = Store::open(fixture.store())?.inventory()?;
+    assert_eq!(active.arenas[0].record.state(), ArenaState::Active);
+    assert!(active.reserved > ByteSize::ZERO);
+    assert_eq!(active.arenas[0].record.last_outcome, None);
+
+    fixture.prepare_resume()?;
+    thread::sleep(Duration::from_millis(100));
+    assert!(!fixture.has_resumed());
+    fixture.resume(mode)?;
+    if mode == ResumeMode::Foreground {
+        session.wait_for_foreground(cargo_group, Duration::from_secs(10))?;
+    }
+    fixture.wait_for_resumed(Duration::from_secs(10))?;
+    if mode == ResumeMode::Background && !promote {
+        assert_eq!(session.foreground_group(), Some(driver_group));
+    }
+    if promote {
+        fixture.foreground_after_background()?;
+        session.wait_for_foreground(cargo_group, Duration::from_secs(10))?;
+    }
+
+    fixture.release_build()?;
+    session.wait_for("JOB_EXIT:0", TIMEOUT)?;
+    assert_eq!(session.foreground_group(), Some(driver_group));
+    let finished = Store::open(fixture.store())?.inventory()?;
+    assert_eq!(finished.arenas[0].record.state(), ArenaState::Idle);
+    assert_eq!(finished.reserved, ByteSize::ZERO);
+    assert_eq!(
+        finished.arenas[0].record.last_outcome,
+        Some(BuildOutcome::Succeeded)
+    );
+
+    fixture.release_driver()?;
+    let status = session.wait_for_exit(TIMEOUT)?;
+    assert!(status.success(), "PTY driver failed: {:?}", session.text());
+    Ok(())
+}
+
+#[test]
 fn terminal_reclaim_driver() -> Result<(), Box<dyn std::error::Error>> {
     terminal_reclaim_fixture::run_driver_if_requested()
+}
+
+#[test]
+fn terminal_suspend_driver() -> Result<(), Box<dyn std::error::Error>> {
+    terminal_suspend_fixture::run_driver_if_requested()
 }

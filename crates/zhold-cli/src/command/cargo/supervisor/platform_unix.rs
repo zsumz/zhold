@@ -2,36 +2,37 @@ use std::{
     io,
     os::unix::process::ExitStatusExt,
     process::{Command, ExitStatus},
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-        mpsc::{Receiver, SyncSender, TryRecvError, sync_channel},
-    },
-    thread::{self, JoinHandle},
+    thread,
 };
 
 use command_group::{CommandGroup, GroupChild};
 use nix::{
     errno::Errno,
     sys::signal::{Signal, killpg},
-    unistd::Pid,
+    unistd::{Pid, getpgrp},
 };
 use signal_hook::{
-    consts::signal::{SIGHUP, SIGINT, SIGQUIT, SIGTERM},
-    iterator::{Handle, Signals},
+    consts::signal::{SIGCONT, SIGHUP, SIGINT, SIGQUIT, SIGTERM},
+    iterator::Signals,
 };
 
 use super::SpawnError;
 
+mod leader;
+mod signals;
 mod terminal;
 
+use leader::{Leader, LeaderEvent};
+use signals::SignalForwarder;
 use terminal::ForegroundTerminal;
 
 #[derive(Debug)]
 pub(in crate::command::cargo) struct PlatformSupervisor {
-    child: GroupChild,
+    _child: GroupChild,
     group: Pid,
+    leader: Leader,
     leader_status: Option<ExitStatus>,
+    quiesce_stop_pending: bool,
     forwarder: SignalForwarder,
     terminal: ForegroundTerminal,
     complete: bool,
@@ -42,8 +43,8 @@ impl PlatformSupervisor {
         command: &mut Command,
         spawned: impl FnOnce() -> io::Result<()>,
     ) -> Result<Self, SpawnError> {
-        let signals =
-            Signals::new([SIGINT, SIGTERM, SIGHUP, SIGQUIT]).map_err(SpawnError::before_child)?;
+        let signals = Signals::new([SIGINT, SIGTERM, SIGHUP, SIGQUIT, SIGCONT])
+            .map_err(SpawnError::before_child)?;
         let mut child = command.group_spawn().map_err(SpawnError::before_child)?;
         if let Err(error) = spawned() {
             return cleanup_failed_spawn(&mut child, error);
@@ -65,9 +66,11 @@ impl PlatformSupervisor {
             }
         };
         Ok(Self {
-            child,
+            _child: child,
             group,
+            leader: Leader::new(group),
             leader_status: None,
+            quiesce_stop_pending: false,
             forwarder,
             terminal,
             complete: false,
@@ -75,11 +78,38 @@ impl PlatformSupervisor {
     }
 
     pub(in crate::command::cargo) fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {
-        self.forwarder.check()?;
+        self.forwarder
+            .check()
+            .map_err(|error| contextual("check forwarded signals", &error))?;
+        let continue_requested = self.forwarder.take_continue_request();
         if self.leader_status.is_none() {
-            self.leader_status = self.child.try_wait()?;
-            if let Some(status) = self.leader_status {
-                self.forwarder.observe_leader_signal(status.signal());
+            match self
+                .leader
+                .poll()
+                .map_err(|error| contextual("observe Cargo leader", &error))?
+            {
+                LeaderEvent::Running => {
+                    let should_reconcile = continue_requested || self.quiesce_stop_pending;
+                    self.quiesce_stop_pending = false;
+                    if should_reconcile && self.wrapper_is_foreground()? {
+                        self.resume_cargo()?;
+                    }
+                }
+                LeaderEvent::Continued => {
+                    if (continue_requested || self.quiesce_stop_pending)
+                        && self.wrapper_is_foreground()?
+                    {
+                        self.resume_cargo()?;
+                    }
+                }
+                LeaderEvent::Stopped(Signal::SIGSTOP) if self.quiesce_stop_pending => {
+                    self.resume_cargo()?;
+                }
+                LeaderEvent::Stopped(_) if self.wrapper_is_foreground()? => {
+                    self.resume_cargo()?;
+                }
+                LeaderEvent::Stopped(signal) => self.suspend_cargo(signal)?,
+                LeaderEvent::Exited(status) => self.record_leader_exit(status),
             }
         }
         if self.leader_status.is_some() {
@@ -99,7 +129,9 @@ impl PlatformSupervisor {
         {
             return Err(os_error(error));
         }
-        self.leader_status = self.child.wait().ok().or(self.leader_status);
+        if self.leader_status.is_none() {
+            self.leader_status = Some(self.leader.wait_for_exit()?);
+        }
         while group_alive(self.group)? {
             thread::sleep(std::time::Duration::from_millis(10));
         }
@@ -111,6 +143,75 @@ impl PlatformSupervisor {
 
     pub(in crate::command::cargo) fn was_interrupted(&self) -> bool {
         self.forwarder.was_interrupted()
+    }
+
+    fn suspend_cargo(&mut self, stop_signal: Signal) -> io::Result<()> {
+        if !signal_group(self.group, Signal::SIGSTOP)
+            .map_err(|error| contextual("stop Cargo process group", &error))?
+        {
+            self.quiesce_stop_pending = false;
+            return self.terminal.restore();
+        }
+        self.quiesce_stop_pending = true;
+        self.terminal
+            .reclaim_for_stop()
+            .map_err(|error| contextual("reclaim terminal for suspended job", &error))?;
+        if !signal_group(getpgrp(), stop_signal)
+            .map_err(|error| contextual("stop zhold process group", &error))?
+        {
+            return Err(io::Error::other(
+                "zhold process group disappeared while suspending",
+            ));
+        }
+        self.resume_cargo()
+    }
+
+    fn resume_cargo(&mut self) -> io::Result<()> {
+        self.terminal
+            .resume_for_continue()
+            .map_err(|error| contextual("reconcile terminal after continue", &error))?;
+        match signal_group(self.group, Signal::SIGCONT) {
+            Ok(true) => {}
+            Ok(false) => self.terminal.restore()?,
+            Err(error) if error.raw_os_error() == Some(Errno::EPERM as i32) => {
+                if self.confirm_leader_exit()? {
+                    self.terminal.restore()?;
+                } else {
+                    return Err(contextual("continue Cargo process group", &error));
+                }
+            }
+            Err(error) => return Err(contextual("continue Cargo process group", &error)),
+        }
+        Ok(())
+    }
+
+    fn wrapper_is_foreground(&self) -> io::Result<bool> {
+        self.terminal
+            .wrapper_is_foreground()
+            .map_err(|error| contextual("inspect terminal ownership", &error))
+    }
+
+    fn record_leader_exit(&mut self, status: ExitStatus) {
+        self.quiesce_stop_pending = false;
+        self.forwarder.observe_leader_signal(status.signal());
+        self.leader_status = Some(status);
+    }
+
+    fn confirm_leader_exit(&mut self) -> io::Result<bool> {
+        loop {
+            match self
+                .leader
+                .poll()
+                .map_err(|error| contextual("observe Cargo leader after continue", &error))?
+            {
+                LeaderEvent::Exited(status) => {
+                    self.record_leader_exit(status);
+                    return Ok(true);
+                }
+                LeaderEvent::Stopped(_) | LeaderEvent::Continued => {}
+                LeaderEvent::Running => return Ok(false),
+            }
+        }
     }
 }
 
@@ -148,104 +249,17 @@ fn terminate_group_child(child: &mut GroupChild) -> io::Result<()> {
     child.wait().map(|_status| ())
 }
 
-#[derive(Debug)]
-struct SignalForwarder {
-    handle: Handle,
-    worker: Option<JoinHandle<()>>,
-    errors: Receiver<io::Error>,
-    interrupted: Arc<AtomicBool>,
-}
-
-impl SignalForwarder {
-    fn spawn(mut signals: Signals, group: Pid) -> io::Result<Self> {
-        let handle = signals.handle();
-        let (errors, receiver) = sync_channel(1);
-        let interrupted = Arc::new(AtomicBool::new(false));
-        let worker_interrupted = Arc::clone(&interrupted);
-        let worker = thread::Builder::new()
-            .name("zhold-signal-forwarder".to_owned())
-            .spawn(move || {
-                forward_signals(&mut signals, group, &errors, &worker_interrupted);
-            })?;
-        Ok(Self {
-            handle,
-            worker: Some(worker),
-            errors: receiver,
-            interrupted,
-        })
-    }
-
-    fn check(&self) -> io::Result<()> {
-        match self.errors.try_recv() {
-            Ok(error) => Err(error),
-            Err(TryRecvError::Empty | TryRecvError::Disconnected) => Ok(()),
-        }
-    }
-
-    fn stop(&mut self) -> io::Result<()> {
-        self.handle.close();
-        if let Some(worker) = self.worker.take() {
-            worker
-                .join()
-                .map_err(|_| io::Error::other("signal forwarder thread failed"))?;
-        }
-        self.check()
-    }
-
-    fn was_interrupted(&self) -> bool {
-        self.interrupted.load(Ordering::SeqCst)
-    }
-
-    fn observe_leader_signal(&self, signal: Option<i32>) {
-        if signal.is_some_and(is_forwarded_signal) {
-            self.interrupted.store(true, Ordering::SeqCst);
-        }
-    }
-}
-
-impl Drop for SignalForwarder {
-    fn drop(&mut self) {
-        self.handle.close();
-    }
-}
-
-fn forward_signals(
-    signals: &mut Signals,
-    group: Pid,
-    errors: &SyncSender<io::Error>,
-    interrupted: &AtomicBool,
-) {
-    for raw_signal in signals.forever() {
-        let signal = if interrupted.swap(true, Ordering::SeqCst) {
-            Signal::SIGKILL
-        } else {
-            forwarded_signal(raw_signal)
-        };
-        if let Err(error) = killpg(group, signal)
-            && error != Errno::ESRCH
-        {
-            let _result = errors.try_send(os_error(error));
-            return;
-        }
-    }
-}
-
-fn is_forwarded_signal(raw_signal: i32) -> bool {
-    matches!(raw_signal, SIGINT | SIGTERM | SIGHUP | SIGQUIT)
-}
-
-fn forwarded_signal(raw_signal: i32) -> Signal {
-    match raw_signal {
-        SIGINT => Signal::SIGINT,
-        SIGHUP => Signal::SIGHUP,
-        SIGQUIT => Signal::SIGQUIT,
-        _ => Signal::SIGTERM,
-    }
-}
-
 fn group_alive(group: Pid) -> io::Result<bool> {
     match killpg(group, None) {
         Ok(()) | Err(Errno::EPERM) => Ok(true),
+        Err(Errno::ESRCH) => Ok(false),
+        Err(error) => Err(os_error(error)),
+    }
+}
+
+fn signal_group(group: Pid, signal: Signal) -> io::Result<bool> {
+    match killpg(group, signal) {
+        Ok(()) => Ok(true),
         Err(Errno::ESRCH) => Ok(false),
         Err(error) => Err(os_error(error)),
     }
@@ -259,4 +273,8 @@ fn process_group(id: u32) -> io::Result<Pid> {
 
 fn os_error(error: Errno) -> io::Error {
     io::Error::from_raw_os_error(error as i32)
+}
+
+fn contextual(operation: &str, error: &io::Error) -> io::Error {
+    io::Error::new(error.kind(), format!("{operation}: {error}"))
 }

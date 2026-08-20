@@ -25,7 +25,9 @@ cross-compilation alone is not sufficient evidence.
 On Unix, zhold transfers a controlling terminal to Cargo only when zhold already
 owns the foreground process group. It restores the previous foreground group
 after success, failure, or interruption. Redirected input and background
-invocations do not change terminal ownership.
+invocations do not change terminal ownership. When Cargo stops, zhold returns
+the terminal to its shell-visible job and stops with it. A foreground resume
+hands the terminal back to Cargo; a background resume leaves it with the shell.
 
 Cargo 1.91 or newer is required for the stable separate build-directory feature.
 The pinned minimum supported Rust toolchain is 1.91.1.

@@ -15,22 +15,33 @@ pub(super) struct ForegroundTerminal {
 
 #[derive(Clone, Copy, Debug)]
 struct Handoff {
-    original_group: Pid,
-    handed_off_group: Pid,
+    wrapper_group: Pid,
+    cargo_group: Pid,
+    active: bool,
 }
 
 impl ForegroundTerminal {
     pub(super) fn hand_off(cargo_group: Pid) -> io::Result<Self> {
-        let Some(original_group) = foreground_group()? else {
+        let Some(current_group) = terminal_group()? else {
             return Ok(Self::detached());
         };
-        set_foreground(cargo_group)?;
+        let wrapper_group = getpgrp();
         let mut terminal = Self {
             handoff: Some(Handoff {
-                original_group,
-                handed_off_group: cargo_group,
+                wrapper_group,
+                cargo_group,
+                active: false,
             }),
         };
+        if current_group != wrapper_group {
+            return Ok(terminal);
+        }
+        set_foreground(cargo_group)?;
+        terminal.handoff = Some(Handoff {
+            wrapper_group,
+            cargo_group,
+            active: true,
+        });
         if let Err(error) = killpg(cargo_group, Signal::SIGCONT)
             && error != Errno::ESRCH
         {
@@ -40,16 +51,47 @@ impl ForegroundTerminal {
         Ok(terminal)
     }
 
+    pub(super) fn wrapper_is_foreground(&self) -> io::Result<bool> {
+        let Some(handoff) = self.handoff else {
+            return Ok(false);
+        };
+        Ok(terminal_group()? == Some(handoff.wrapper_group))
+    }
+
+    pub(super) fn reclaim_for_stop(&mut self) -> io::Result<()> {
+        let Some(mut handoff) = self.handoff else {
+            return Ok(());
+        };
+        if handoff.active && terminal_group()? == Some(handoff.cargo_group) {
+            set_foreground(handoff.wrapper_group)?;
+        }
+        handoff.active = false;
+        self.handoff = Some(handoff);
+        Ok(())
+    }
+
+    pub(super) fn resume_for_continue(&mut self) -> io::Result<()> {
+        let Some(mut handoff) = self.handoff else {
+            return Ok(());
+        };
+        match terminal_group()? {
+            Some(current) if current == handoff.wrapper_group => {
+                set_foreground(handoff.cargo_group)?;
+                handoff.active = true;
+            }
+            Some(current) if current == handoff.cargo_group && handoff.active => {}
+            _ => handoff.active = false,
+        }
+        self.handoff = Some(handoff);
+        Ok(())
+    }
+
     pub(super) fn restore(&mut self) -> io::Result<()> {
         let Some(handoff) = self.handoff else {
             return Ok(());
         };
-        let Some(current_group) = terminal_group()? else {
-            self.handoff = None;
-            return Ok(());
-        };
-        if current_group == handoff.handed_off_group {
-            set_foreground(handoff.original_group)?;
+        if handoff.active && terminal_group()? == Some(handoff.cargo_group) {
+            set_foreground(handoff.wrapper_group)?;
         }
         self.handoff = None;
         Ok(())
@@ -64,11 +106,6 @@ impl Drop for ForegroundTerminal {
     fn drop(&mut self) {
         let _restored = self.restore();
     }
-}
-
-fn foreground_group() -> io::Result<Option<Pid>> {
-    let foreground = terminal_group()?;
-    Ok(foreground.filter(|group| *group == getpgrp()))
 }
 
 fn terminal_group() -> io::Result<Option<Pid>> {
