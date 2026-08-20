@@ -1,5 +1,6 @@
 use std::{
     io,
+    os::unix::process::ExitStatusExt,
     process::{Command, ExitStatus},
     sync::{
         Arc,
@@ -77,9 +78,14 @@ impl PlatformSupervisor {
         self.forwarder.check()?;
         if self.leader_status.is_none() {
             self.leader_status = self.child.try_wait()?;
+            if let Some(status) = self.leader_status {
+                self.forwarder.observe_leader_signal(status.signal());
+            }
+        }
+        if self.leader_status.is_some() {
+            self.terminal.restore()?;
         }
         if self.leader_status.is_some() && !group_alive(self.group)? {
-            self.terminal.restore()?;
             self.forwarder.stop()?;
             self.complete = true;
             return Ok(self.leader_status);
@@ -189,6 +195,12 @@ impl SignalForwarder {
     fn was_interrupted(&self) -> bool {
         self.interrupted.load(Ordering::SeqCst)
     }
+
+    fn observe_leader_signal(&self, signal: Option<i32>) {
+        if signal.is_some_and(is_forwarded_signal) {
+            self.interrupted.store(true, Ordering::SeqCst);
+        }
+    }
 }
 
 impl Drop for SignalForwarder {
@@ -203,11 +215,8 @@ fn forward_signals(
     errors: &SyncSender<io::Error>,
     interrupted: &AtomicBool,
 ) {
-    let mut received = 0_u32;
     for raw_signal in signals.forever() {
-        interrupted.store(true, Ordering::SeqCst);
-        received = received.saturating_add(1);
-        let signal = if received > 1 {
+        let signal = if interrupted.swap(true, Ordering::SeqCst) {
             Signal::SIGKILL
         } else {
             forwarded_signal(raw_signal)
@@ -219,6 +228,10 @@ fn forward_signals(
             return;
         }
     }
+}
+
+fn is_forwarded_signal(raw_signal: i32) -> bool {
+    matches!(raw_signal, SIGINT | SIGTERM | SIGHUP | SIGQUIT)
 }
 
 fn forwarded_signal(raw_signal: i32) -> Signal {

@@ -10,7 +10,13 @@ const STANDARD_INPUT: i32 = 0;
 
 #[derive(Debug)]
 pub(super) struct ForegroundTerminal {
-    original_group: Option<Pid>,
+    handoff: Option<Handoff>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Handoff {
+    original_group: Pid,
+    handed_off_group: Pid,
 }
 
 impl ForegroundTerminal {
@@ -19,30 +25,38 @@ impl ForegroundTerminal {
             return Ok(Self::detached());
         };
         set_foreground(cargo_group)?;
+        let mut terminal = Self {
+            handoff: Some(Handoff {
+                original_group,
+                handed_off_group: cargo_group,
+            }),
+        };
         if let Err(error) = killpg(cargo_group, Signal::SIGCONT)
             && error != Errno::ESRCH
         {
-            let _restored = set_foreground(original_group);
+            let _restored = terminal.restore();
             return Err(os_error(error));
         }
-        Ok(Self {
-            original_group: Some(original_group),
-        })
+        Ok(terminal)
     }
 
     pub(super) fn restore(&mut self) -> io::Result<()> {
-        let Some(original_group) = self.original_group else {
+        let Some(handoff) = self.handoff else {
             return Ok(());
         };
-        set_foreground(original_group)?;
-        self.original_group = None;
+        let Some(current_group) = terminal_group()? else {
+            self.handoff = None;
+            return Ok(());
+        };
+        if current_group == handoff.handed_off_group {
+            set_foreground(handoff.original_group)?;
+        }
+        self.handoff = None;
         Ok(())
     }
 
     const fn detached() -> Self {
-        Self {
-            original_group: None,
-        }
+        Self { handoff: None }
     }
 }
 
@@ -53,6 +67,11 @@ impl Drop for ForegroundTerminal {
 }
 
 fn foreground_group() -> io::Result<Option<Pid>> {
+    let foreground = terminal_group()?;
+    Ok(foreground.filter(|group| *group == getpgrp()))
+}
+
+fn terminal_group() -> io::Result<Option<Pid>> {
     if !io::stdin().is_terminal() {
         return Ok(None);
     }
@@ -61,7 +80,7 @@ fn foreground_group() -> io::Result<Option<Pid>> {
         Err(Errno::ENOTTY) => return Ok(None),
         Err(error) => return Err(os_error(error)),
     };
-    Ok((foreground == getpgrp()).then_some(foreground))
+    Ok(Some(foreground))
 }
 
 fn set_foreground(group: Pid) -> io::Result<()> {
