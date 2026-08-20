@@ -1,4 +1,7 @@
-use std::{fs, io};
+use std::{
+    fs, io,
+    sync::{Arc, Barrier},
+};
 
 use tempfile::tempdir;
 use zhold_core::{ArenaState, BuildOutcome};
@@ -11,7 +14,8 @@ use crate::{
     test_support::{context, finish_succeeded, invocation},
 };
 
-use super::Store;
+use super::{Store, initialization::initialization_entry_is_allowed};
+use crate::layout::StoreLayout;
 
 #[test]
 fn initializes_an_empty_marked_store() -> Result<(), Box<dyn std::error::Error>> {
@@ -39,13 +43,41 @@ fn concurrent_store_initializers_serialize_marker_publication()
     let temporary = tempdir()?;
     let root = temporary.path().to_path_buf();
     let contender = root.clone();
-    let opener = std::thread::spawn(move || Store::open(contender));
+    let gate = Arc::new(Barrier::new(2));
+    let contender_gate = Arc::clone(&gate);
+    let opener = std::thread::spawn(move || {
+        contender_gate.wait();
+        Store::open(contender)
+    });
+    gate.wait();
     let store = Store::open(root)?;
     let concurrent = opener
         .join()
         .map_err(|_| io::Error::other("concurrent initializer thread failed"))??;
 
     assert_eq!(store.info().store_id, concurrent.info().store_id);
+    Ok(())
+}
+
+#[test]
+fn disappearing_capability_probe_is_treated_as_absent() -> Result<(), Box<dyn std::error::Error>> {
+    let temporary = tempdir()?;
+    let layout = StoreLayout::new(temporary.path().to_path_buf());
+    let probe = temporary
+        .path()
+        .join(format!("store.probe.{}.link", uuid::Uuid::new_v4()));
+    fs::write(&probe, b"probe")?;
+    let stale_entry = fs::read_dir(temporary.path())?
+        .next()
+        .ok_or_else(|| io::Error::other("probe entry was not enumerated"))??;
+    assert_eq!(stale_entry.path(), probe);
+    fs::remove_file(&probe)?;
+
+    assert!(initialization_entry_is_allowed(
+        &layout,
+        &stale_entry.path()
+    )?);
+    assert!(initialization_entry_is_allowed(&layout, &temporary.path().join("foreign")).is_err());
     Ok(())
 }
 

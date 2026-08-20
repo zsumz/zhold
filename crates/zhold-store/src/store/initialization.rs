@@ -98,17 +98,28 @@ fn contains_only_initialization_files(layout: &StoreLayout) -> Result<bool, Stor
             StoreError::io("inspect store initialization entry", layout.root(), error)
         })?;
         let path = entry.path();
-        let metadata = fs::symlink_metadata(&path)
-            .map_err(|error| StoreError::io("inspect store initialization entry", &path, error))?;
-        let recognized = path == layout.marker()
-            || path == layout.initialization_lock()
-            || is_marker_staging(&path)
-            || is_capability_probe(&path);
-        if !metadata.is_file() || !recognized {
+        if !initialization_entry_is_allowed(layout, &path)? {
             return Ok(false);
         }
     }
     Ok(true)
+}
+
+pub(super) fn initialization_entry_is_allowed(
+    layout: &StoreLayout,
+    path: &Path,
+) -> Result<bool, StoreError> {
+    let transient = is_marker_staging(path) || is_capability_probe(path);
+    let recognized = path == layout.marker() || path == layout.initialization_lock() || transient;
+    match fs::symlink_metadata(path) {
+        Ok(metadata) => Ok(metadata.is_file() && recognized),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound && transient => Ok(true),
+        Err(error) => Err(StoreError::io(
+            "inspect store initialization entry",
+            path,
+            error,
+        )),
+    }
 }
 
 fn is_marker_staging(path: &Path) -> bool {
