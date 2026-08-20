@@ -84,6 +84,15 @@ def check_required_files(checks: Checks) -> None:
         checks.require((ROOT / name).is_file(), f"missing required file {name}")
 
 
+def check_license_copies(checks: Checks) -> None:
+    root_license = (ROOT / "LICENSE").read_bytes()
+    for crate in ["zhold-cli", "zhold-core", "zhold-store"]:
+        path = CRATES / crate / "LICENSE"
+        checks.require(path.is_file(), f"missing required file {relative(path)}")
+        if path.is_file():
+            checks.require(path.read_bytes() == root_license, f"{relative(path)} differs from LICENSE")
+
+
 def check_workspace(checks: Checks) -> None:
     manifest = tomllib.loads((ROOT / "Cargo.toml").read_text(encoding="utf-8"))
     workspace = manifest.get("workspace", {})
@@ -519,6 +528,7 @@ def raw_string_end(text: str, start: int) -> int | None:
 def main() -> int:
     checks = Checks()
     check_required_files(checks)
+    check_license_copies(checks)
     check_workspace(checks)
     check_name_contract(checks)
     check_rust(checks)
