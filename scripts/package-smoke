@@ -64,6 +64,13 @@ for required in "${required_files[@]}"; do
   fi
 done
 
+for readme in "$core/README.md" "$store/README.md" "$cli/README.md"; do
+  if grep -Eq 'src="\./|\]\((docs/|LICENSE\))' "$readme"; then
+    echo "packaged README contains a repository-relative link: $readme" >&2
+    exit 1
+  fi
+done
+
 export CARGO_HOME="$temporary/cargo-home"
 export CARGO_TARGET_DIR="$temporary/consumer-target"
 install_root="$temporary/install"

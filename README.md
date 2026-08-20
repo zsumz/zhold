@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./zhold-logo.svg" alt="zhold" width="720">
+  <img src="https://raw.githubusercontent.com/zsumz/zhold/main/zhold-logo.svg" alt="zhold" width="720">
 </p>
 
 <p align="center"><strong>Bounded Cargo build storage for parallel Git worktrees.</strong></p>
@@ -74,7 +74,8 @@ zhold removes only complete build directories that it created and can validate.
 It checks ownership, metadata, leases, pins, and worktree state before removal.
 Unknown state stops collection.
 
-See the [safety and threat model](docs/safety.md) for the exact guarantees.
+See the [safety and threat model](https://github.com/zsumz/zhold/blob/main/docs/safety.md)
+for the exact guarantees.
 
 ## Development
 
@@ -85,9 +86,11 @@ cargo install --path crates/zhold-cli --locked
 ./scripts/package-smoke
 ```
 
-See [design](docs/design.md), [locking](docs/locking.md), and
-[platform support](docs/platform-support.md) for implementation details.
+See [design](https://github.com/zsumz/zhold/blob/main/docs/design.md),
+[locking](https://github.com/zsumz/zhold/blob/main/docs/locking.md), and
+[platform support](https://github.com/zsumz/zhold/blob/main/docs/platform-support.md)
+for implementation details.
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE).
+Apache-2.0. See [LICENSE](https://github.com/zsumz/zhold/blob/main/LICENSE).
